@@ -1,5 +1,6 @@
 (async function bootstrap() {
   const report = await fetch("./data/daily_report.json").then((r) => r.json());
+  window.__orbitwhisperReport = report;
   const summary = document.getElementById("summary");
   summary.innerHTML = `
     <div class="metric">生成时间: ${report.generated_at}</div>
@@ -8,6 +9,7 @@
   `;
 
   if (window.Cesium) {
+    Cesium.Ion.defaultAccessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIzY2ZlZjYxZi1kOGM1LTRhN2MtOGRhNi1mMDBkMWEwNjZlYTkiLCJpZCI6NDA4NzUzLCJpYXQiOjE3NzQ0MDkwMTl9.StFh8-TIWbpATRQHRmTiHtxHGeRWFSc6SNsUcESHmhc";
     const viewer = new Cesium.Viewer("cesiumContainer", {
       animation: false,
       timeline: false,
@@ -17,15 +19,14 @@
       baseLayerPicker: false,
       terrain: Cesium.Terrain.fromWorldTerrain(),
     });
+    window.__orbitwhisperViewer = viewer;
     viewer.scene.globe.enableLighting = true;
 
-    report.orbits.forEach((orbit, idx) => {
-      const lon = 110 + idx * 20;
-      const lat = 10 + idx * 8;
+    report.orbits.forEach((orbit) => {
       viewer.entities.add({
         id: orbit.asset_id,
         name: orbit.name,
-        position: Cesium.Cartesian3.fromDegrees(lon, lat, 550000 + idx * 20000),
+        position: Cesium.Cartesian3.fromDegrees(orbit.lng, orbit.lat, Math.max(0, orbit.alt) * 1000),
         point: { pixelSize: 9, color: Cesium.Color.CYAN },
         label: {
           text: orbit.asset_id,
@@ -36,6 +37,20 @@
         },
       });
     });
+    const orbitMap = Object.fromEntries(
+      report.orbits.map((orbit) => [orbit.asset_id.toLowerCase(), orbit]),
+    );
+    window.focusSatellite = function focusSatellite(keyword) {
+      const key = String(keyword || "").trim().toLowerCase();
+      if (!key) return false;
+      const orbit = orbitMap[key];
+      if (!orbit) return false;
+      viewer.camera.flyTo({
+        destination: Cesium.Cartesian3.fromDegrees(orbit.lng, orbit.lat, Math.max(0, orbit.alt) * 1000 + 600000),
+        duration: 1.2,
+      });
+      return true;
+    };
 
     report.high_risk_events.forEach((evt, idx) => {
       const lon = 90 + idx * 15;

@@ -1,341 +1,233 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OrbitWhisper | 3D 在轨资产风险终端</title>
-    <style>
-        body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; }
-        #hud {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            color: #00ffcc;
-            background: rgba(0, 20, 40, 0.8);
-            padding: 20px;
-            border: 1px solid #00ffcc;
-            border-radius: 8px;
-            z-index: 10;
-            backdrop-filter: blur(5px);
-        }
-        h1 { font-size: 1.5rem; margin: 0 0 10px 0; }
-        p { font-size: 0.9rem; margin: 5px 0; color: #ccc; }
-        #controlPanel {
-            position: absolute;
-            top: 170px;
-            left: 20px;
-            width: 340px;
-            z-index: 11;
-            background: rgba(2, 24, 42, 0.86);
-            border: 1px solid #00ffcc;
-            border-radius: 8px;
-            color: #d6fbff;
-            backdrop-filter: blur(5px);
-        }
-        #panelHeader {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 10px 12px;
-            cursor: pointer;
-            font-size: 0.95rem;
-            border-bottom: 1px solid rgba(0, 255, 204, 0.25);
-        }
-        #panelBody { padding: 10px 12px 12px; }
-        #panelBody.collapsed { display: none; }
-        .dropZone {
-            border: 1px dashed #00b18f;
-            border-radius: 6px;
-            padding: 12px;
-            margin-bottom: 10px;
-            font-size: 0.85rem;
-            color: #9ed9d2;
-            background: rgba(0, 23, 35, 0.55);
-        }
-        .dropZone.dragover { border-color: #00ffcc; color: #d6fffa; }
-        #searchInput {
-            width: 100%;
-            box-sizing: border-box;
-            background: rgba(5, 14, 27, 0.9);
-            color: #e5f8ff;
-            border: 1px solid #30627d;
-            border-radius: 6px;
-            padding: 8px;
-        }
-        #searchResults {
-            margin: 8px 0 0;
-            max-height: 120px;
-            overflow: auto;
-            padding-left: 16px;
-            font-size: 0.82rem;
-        }
-        #statusText { font-size: 0.8rem; color: #8ab6c7; min-height: 18px; }
-        #namingModal {
-            display: none;
-            position: absolute;
-            inset: 0;
-            z-index: 30;
-            background: rgba(0, 0, 0, 0.6);
-            align-items: center;
-            justify-content: center;
-        }
-        #namingModal .content {
-            width: 360px;
-            background: #031623;
-            border: 1px solid #00ffcc;
-            border-radius: 8px;
-            padding: 16px;
-            color: #d6fbff;
-        }
-        #namingInput {
-            width: 100%;
-            box-sizing: border-box;
-            margin: 8px 0 10px;
-            padding: 8px;
-            border-radius: 6px;
-            border: 1px solid #2f6988;
-            background: #091a2b;
-            color: #e6f7ff;
-        }
-        .modalBtn {
-            border: 1px solid #00ffcc;
-            border-radius: 6px;
-            padding: 6px 10px;
-            background: transparent;
-            color: #d6fbff;
-            cursor: pointer;
-            margin-right: 8px;
-        }
-    </style>
-    <script src="https://unpkg.com/three@0.136.0/build/three.min.js"></script>
-    <script src="https://unpkg.com/globe.gl@2.32.0/dist/globe.gl.min.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OrbitWhisper | 3D 在轨资产风险终端</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.0/echarts.min.js"></script>
+  <script src="https://cesium.com/downloads/cesiumjs/releases/1.120/Build/Cesium/Cesium.js"></script>
+  <link href="https://cesium.com/downloads/cesiumjs/releases/1.120/Build/Cesium/Widgets/widgets.css" rel="stylesheet" />
+  <style>
+    html, body, #cesiumContainer { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #03070f; }
+    #hud {
+      position: absolute; top: 20px; left: 20px; z-index: 10; width: 360px;
+      background: rgba(7, 18, 37, 0.85); color: #d8e6ff; border: 1px solid rgba(103, 146, 255, 0.6);
+      border-radius: 8px; padding: 14px; font-family: Arial, sans-serif;
+    }
+    h1 { margin: 0 0 10px; font-size: 18px; color: #eaf2ff; }
+    #summary .metric { margin: 6px 0; font-size: 13px; }
+    #summary .warn { color: #ff8f8f; }
+    #controlPanel {
+      position: absolute; top: 210px; left: 20px; width: 360px; z-index: 11;
+      background: rgba(3, 16, 31, 0.88); border: 1px solid rgba(88, 160, 255, 0.4);
+      border-radius: 8px; color: #d5ecff; font-family: Arial, sans-serif;
+    }
+    #panelHeader { padding: 10px 12px; display: flex; justify-content: space-between; cursor: pointer; border-bottom: 1px solid rgba(88,160,255,0.2); }
+    #panelBody { padding: 10px 12px; }
+    #panelBody.collapsed { display: none; }
+    .dropZone { border: 1px dashed #3f78c3; border-radius: 6px; padding: 10px; margin-bottom: 10px; font-size: 13px; background: rgba(10, 24, 47, 0.5); }
+    .dropZone.dragover { border-color: #7ab0ff; background: rgba(15, 35, 67, 0.75); }
+    #searchInput, #namingInput {
+      width: 100%; box-sizing: border-box; background: #0a1627; color: #e8f1ff;
+      border: 1px solid #355c91; border-radius: 6px; padding: 8px;
+    }
+    #searchResults { margin: 8px 0 0; max-height: 120px; overflow: auto; padding-left: 18px; font-size: 13px; }
+    #statusText { margin-top: 8px; min-height: 16px; color: #9dc4f7; font-size: 12px; }
+    #chartPanel {
+      position: absolute; right: 20px; bottom: 20px; width: 420px; height: 260px; z-index: 12;
+      background: rgba(6, 14, 27, 0.82); border: 1px solid rgba(88, 166, 255, 0.45); border-radius: 8px; padding: 10px;
+    }
+    #survivalChart { width: 100%; height: 100%; }
+    #namingModal {
+      display: none; position: absolute; inset: 0; z-index: 30; background: rgba(0, 0, 0, 0.6);
+      align-items: center; justify-content: center; font-family: Arial, sans-serif;
+    }
+    #namingModal .content { width: 360px; background: #031623; border: 1px solid #58a6ff; border-radius: 8px; padding: 16px; color: #d6fbff; }
+    .modalBtn {
+      border: 1px solid #58a6ff; border-radius: 6px; padding: 6px 10px;
+      background: transparent; color: #d6fbff; cursor: pointer; margin-right: 8px;
+    }
+  </style>
 </head>
 <body>
-    <div id="hud">
-        <h1>OrbitWhisper 风险评估引擎</h1>
-        <p>资产状态: <span style="color: #00ff00;">监控中</span></p>
-        <p>当前渲染目标: 300 颗模拟卫星</p>
-        <p>动态保费建议: 等待精算模型...</p>
+  <div id="cesiumContainer"></div>
+
+  <div id="hud">
+    <h1>OrbitWhisper 风险评估引擎</h1>
+    <div id="summary"><div class="metric">正在加载数据...</div></div>
+  </div>
+
+  <div id="controlPanel">
+    <div id="panelHeader">
+      <span>交互式光学定轨控制台</span>
+      <span id="panelToggle">收起</span>
     </div>
-    <div id="controlPanel">
-        <div id="panelHeader">
-            <span>交互式光学定轨控制台</span>
-            <span id="panelToggle">收起</span>
-        </div>
-        <div id="panelBody">
-            <div id="tleDropZone" class="dropZone">上传轨道数据（拖拽 .tle/.txt 文件）</div>
-            <div id="imageDropZone" class="dropZone">上传观测图片（拖拽多张图片）</div>
-            <input id="searchInput" type="text" placeholder="搜索卫星名称或编号..." list="satelliteHints" />
-            <datalist id="satelliteHints"></datalist>
-            <ul id="searchResults"></ul>
-            <div id="statusText"></div>
-        </div>
+    <div id="panelBody">
+      <div id="tleDropZone" class="dropZone">上传轨道数据（拖拽 .tle/.txt 文件）</div>
+      <div id="imageDropZone" class="dropZone">上传观测图片（拖拽多张图片）</div>
+      <input id="searchInput" type="text" placeholder="搜索卫星名称或编号..." list="satelliteHints" />
+      <datalist id="satelliteHints"></datalist>
+      <ul id="searchResults"></ul>
+      <div id="statusText"></div>
     </div>
-    <div id="namingModal">
-        <div class="content">
-            <div id="modalMessage">发现未知目标，系统建议命名为 Astro-X1</div>
-            <input id="namingInput" type="text" />
-            <button id="saveNameBtn" class="modalBtn">保存命名</button>
-            <button id="cancelNameBtn" class="modalBtn">取消</button>
-        </div>
+  </div>
+
+  <div id="chartPanel">
+    <div id="survivalChart"></div>
+  </div>
+
+  <div id="namingModal">
+    <div class="content">
+      <div id="modalMessage">发现未知目标，系统建议命名为 Astro-X1</div>
+      <input id="namingInput" type="text" />
+      <button id="saveNameBtn" class="modalBtn">保存命名</button>
+      <button id="cancelNameBtn" class="modalBtn">取消</button>
     </div>
+  </div>
 
-    <div id="globeViz"></div>
+  <script src="./app.js"></script>
+  <script>
+    const API_BASE = '';
+    const searchInput = document.getElementById('searchInput');
+    const searchResults = document.getElementById('searchResults');
+    const statusText = document.getElementById('statusText');
+    const hints = document.getElementById('satelliteHints');
+    const panelBody = document.getElementById('panelBody');
+    const panelToggle = document.getElementById('panelToggle');
+    const namingModal = document.getElementById('namingModal');
+    const namingInput = document.getElementById('namingInput');
+    const modalMessage = document.getElementById('modalMessage');
+    let pendingTempId = '';
 
-    <script>
-        const API_BASE = '';
+    function bindDropZone(elementId, onFiles) {
+      const zone = document.getElementById(elementId);
+      ['dragenter', 'dragover'].forEach(evt => zone.addEventListener(evt, e => {
+        e.preventDefault();
+        zone.classList.add('dragover');
+      }));
+      ['dragleave', 'drop'].forEach(evt => zone.addEventListener(evt, e => {
+        e.preventDefault();
+        zone.classList.remove('dragover');
+      }));
+      zone.addEventListener('drop', e => onFiles(Array.from(e.dataTransfer.files || [])));
+    }
 
-        // 1. 初始化 3D 地球 (强制 HTTPS 贴图)
-        let world = null;
-        if (window.Globe) {
-            world = Globe()
-                (document.getElementById('globeViz'))
-                .globeImageUrl('https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg')
-                .bumpImageUrl('https://unpkg.com/three-globe/example/img/earth-topology.png')
-                .backgroundImageUrl('https://unpkg.com/three-globe/example/img/night-sky.png');
-
-            // 设置初始视角和自动旋转
-            world.pointOfView({ altitude: 2.5 });
-            world.controls().autoRotate = true;
-            world.controls().autoRotateSpeed = 0.5;
-        } else {
-            document.getElementById('globeViz').style.background = 'radial-gradient(circle at 20% 20%, #16345f, #05070c 65%)';
-        }
-
-        // 2. 生成模拟的卫星数据 (Mock Data)
-        // 随机生成 300 颗低轨卫星，模拟高危(红色)和健康(青色)资产
-        const N = 300;
-        const mockSatellites = [...Array(N).keys()].map(() => ({
-            id: `SAT-${Math.floor(Math.random() * 100000)}`,
-            name: `AstroSat-${Math.floor(Math.random() * 999)}`,
-            lat: (Math.random() - 0.5) * 180,
-            lng: (Math.random() - 0.5) * 360,
-            alt: Math.random() * 0.4 + 0.1, // 轨道高度
-            radius: Math.random() * 1.2 + 0.3, // 卫星模型大小
-            // 随机分配状态颜色：80%正常(青绿)，20%高危交会预警(红色)
-            color: Math.random() > 0.8 ? '#ff0044' : '#00ffcc' 
-        }));
-
-        // 3. 将卫星渲染到地球周围
-        if (world) {
-            world.objectsData(mockSatellites)
-                .objectLat('lat')
-                .objectLng('lng')
-                .objectAltitude('alt')
-                .objectThreeObject(d => {
-                    // 使用 Three.js 画一个小发光球体代表卫星
-                    const geometry = new THREE.SphereGeometry(d.radius, 16, 16);
-                    const material = new THREE.MeshBasicMaterial({ color: d.color });
-                    return new THREE.Mesh(geometry, material);
-                });
-        }
-
-        const searchInput = document.getElementById('searchInput');
-        const searchResults = document.getElementById('searchResults');
-        const statusText = document.getElementById('statusText');
-        const hints = document.getElementById('satelliteHints');
-        const panelBody = document.getElementById('panelBody');
-        const panelToggle = document.getElementById('panelToggle');
-        const namingModal = document.getElementById('namingModal');
-        const namingInput = document.getElementById('namingInput');
-        const modalMessage = document.getElementById('modalMessage');
-        let pendingTempId = '';
-
-        const localHints = mockSatellites.slice(0, 80).map(s => s.name);
-        localHints.forEach(name => {
-            const option = document.createElement('option');
-            option.value = name;
-            hints.appendChild(option);
+    async function uploadTleFiles(files) {
+      if (!files.length) return;
+      const text = await files[0].text();
+      try {
+        const resp = await fetch(`${API_BASE}/api/upload_tle`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tle_text: text })
         });
+        if (!resp.ok) throw new Error('TLE 上传失败');
+        const data = await resp.json();
+        statusText.textContent = `已上传轨道: ${data.satellite.name}`;
+      } catch (err) {
+        statusText.textContent = `轨道上传失败: ${err.message}`;
+      }
+    }
 
-        document.getElementById('panelHeader').addEventListener('click', () => {
-            panelBody.classList.toggle('collapsed');
-            panelToggle.textContent = panelBody.classList.contains('collapsed') ? '展开' : '收起';
+    async function uploadImageFiles(files) {
+      if (!files.length) return;
+      const form = new FormData();
+      const timestamps = files.map(() => new Date().toISOString());
+      files.forEach(file => form.append('files', file));
+      form.append('timestamps', JSON.stringify(timestamps));
+      try {
+        const resp = await fetch(`${API_BASE}/api/upload_image`, { method: 'POST', body: form });
+        if (!resp.ok) throw new Error('观测图片上传失败');
+        const data = await resp.json();
+        statusText.textContent = `解算完成：提取目标 ${data.observation_targets.length} 个`;
+        if (data.unknown_target_suggestion) {
+          const generatedTempId = data.unknown_temp_id || `UNKN-${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}`;
+          showNamingModal(data.unknown_target_suggestion, generatedTempId);
+        }
+      } catch (err) {
+        statusText.textContent = `图片上传失败: ${err.message}`;
+      }
+    }
+
+    function focusSatelliteByName(name) {
+      if (window.focusSatellite && window.focusSatellite(name)) return true;
+      return false;
+    }
+
+    async function searchSatellite(keyword) {
+      searchResults.innerHTML = '';
+      if (!keyword || keyword.length < 2) return;
+      let results = [];
+      try {
+        const resp = await fetch(`${API_BASE}/api/satellites/search?q=${encodeURIComponent(keyword)}`);
+        if (resp.ok) {
+          const data = await resp.json();
+          results = data.results || [];
+        }
+      } catch (_) {}
+
+      if (!results.length && window.__orbitwhisperReport) {
+        const q = keyword.toLowerCase();
+        results = (window.__orbitwhisperReport.orbits || [])
+          .filter(o => o.asset_id.toLowerCase().includes(q) || (o.name || '').toLowerCase().includes(q))
+          .slice(0, 8)
+          .map(o => ({ id: o.asset_id, name: o.name || o.asset_id, source: 'daily_report' }));
+      }
+
+      results.forEach(item => {
+        const li = document.createElement('li');
+        li.textContent = `${item.name} (${item.source})`;
+        li.style.cursor = 'pointer';
+        li.addEventListener('click', () => {
+          focusSatelliteByName(item.name) || focusSatelliteByName(item.id);
+          statusText.textContent = `已定位并追踪: ${item.name}`;
         });
+        searchResults.appendChild(li);
+      });
+    }
 
-        function bindDropZone(elementId, onFiles) {
-            const zone = document.getElementById(elementId);
-            ['dragenter', 'dragover'].forEach(evt => zone.addEventListener(evt, e => {
-                e.preventDefault();
-                zone.classList.add('dragover');
-            }));
-            ['dragleave', 'drop'].forEach(evt => zone.addEventListener(evt, e => {
-                e.preventDefault();
-                zone.classList.remove('dragover');
-            }));
-            zone.addEventListener('drop', e => onFiles(Array.from(e.dataTransfer.files || [])));
-        }
+    function showNamingModal(suggestedName, tempId) {
+      pendingTempId = tempId;
+      modalMessage.textContent = `发现未知目标，系统建议命名为 ${suggestedName}`;
+      namingInput.value = suggestedName;
+      namingModal.style.display = 'flex';
+    }
 
-        async function uploadTleFiles(files) {
-            if (!files.length) return;
-            const text = await files[0].text();
-            try {
-                const resp = await fetch(`${API_BASE}/api/upload_tle`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ tle_text: text })
-                });
-                if (!resp.ok) throw new Error('TLE 上传失败');
-                const data = await resp.json();
-                statusText.textContent = `已上传轨道: ${data.satellite.name}`;
-            } catch (err) {
-                statusText.textContent = `轨道上传失败: ${err.message}`;
-            }
-        }
-
-        async function uploadImageFiles(files) {
-            if (!files.length) return;
-            const form = new FormData();
-            const timestamps = files.map(() => new Date().toISOString());
-            files.forEach(file => form.append('files', file));
-            form.append('timestamps', JSON.stringify(timestamps));
-            try {
-                const resp = await fetch(`${API_BASE}/api/upload_image`, { method: 'POST', body: form });
-                if (!resp.ok) throw new Error('观测图片上传失败');
-                const data = await resp.json();
-                statusText.textContent = `解算完成：提取目标 ${data.observation_targets.length} 个`;
-                if (data.unknown_target_suggestion) {
-                    const generatedTempId = data.unknown_temp_id || `UNKN-${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}`;
-                    showNamingModal(data.unknown_target_suggestion, generatedTempId);
-                }
-            } catch (err) {
-                statusText.textContent = `图片上传失败: ${err.message}`;
-            }
-        }
-
-        function focusSatelliteByName(name) {
-            const sat = mockSatellites.find(s => s.name === name || s.id === name);
-            if (!sat || !world) return false;
-            world.pointOfView({ lat: sat.lat, lng: sat.lng, altitude: 1.2 }, 1200);
-            return true;
-        }
-
-        async function searchSatellite(keyword) {
-            searchResults.innerHTML = '';
-            if (!keyword || keyword.length < 2) return;
-
-            let results = [];
-            try {
-                const resp = await fetch(`${API_BASE}/api/satellites/search?q=${encodeURIComponent(keyword)}`);
-                if (resp.ok) {
-                    const data = await resp.json();
-                    results = data.results || [];
-                }
-            } catch (_) {
-                // 离线时退回本地模拟搜索
-            }
-
-            if (!results.length) {
-                results = mockSatellites
-                    .filter(s => s.name.toLowerCase().includes(keyword.toLowerCase()))
-                    .slice(0, 8)
-                    .map(s => ({ id: s.id, name: s.name, source: 'local' }));
-            }
-
-            results.forEach(item => {
-                const li = document.createElement('li');
-                li.textContent = `${item.name} (${item.source})`;
-                li.style.cursor = 'pointer';
-                li.addEventListener('click', () => {
-                    focusSatelliteByName(item.name);
-                    statusText.textContent = `已定位并追踪: ${item.name}`;
-                });
-                searchResults.appendChild(li);
-            });
-        }
-
-        function showNamingModal(suggestedName, tempId) {
-            pendingTempId = tempId;
-            modalMessage.textContent = `发现未知目标，系统建议命名为 ${suggestedName}`;
-            namingInput.value = suggestedName;
-            namingModal.style.display = 'flex';
-        }
-
-        async function saveCustomName() {
-            const customName = namingInput.value.trim();
-            if (!customName || !pendingTempId) return;
-            try {
-                await fetch(`${API_BASE}/api/satellites/name`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ temp_id: pendingTempId, custom_name: customName })
-                });
-                statusText.textContent = `未知目标已命名: ${customName}`;
-            } catch (_) {
-                statusText.textContent = `命名已记录（离线模式）: ${customName}`;
-            }
-            namingModal.style.display = 'none';
-            pendingTempId = '';
-        }
-
-        bindDropZone('tleDropZone', uploadTleFiles);
-        bindDropZone('imageDropZone', uploadImageFiles);
-        searchInput.addEventListener('input', () => searchSatellite(searchInput.value.trim()));
-        document.getElementById('saveNameBtn').addEventListener('click', saveCustomName);
-        document.getElementById('cancelNameBtn').addEventListener('click', () => {
-            namingModal.style.display = 'none';
-            pendingTempId = '';
+    async function saveCustomName() {
+      const customName = namingInput.value.trim();
+      if (!customName || !pendingTempId) return;
+      try {
+        await fetch(`${API_BASE}/api/satellites/name`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ temp_id: pendingTempId, custom_name: customName })
         });
-    </script>
+        statusText.textContent = `未知目标已命名: ${customName}`;
+      } catch (_) {
+        statusText.textContent = `命名已记录（离线模式）: ${customName}`;
+      }
+      namingModal.style.display = 'none';
+      pendingTempId = '';
+    }
+
+    document.getElementById('panelHeader').addEventListener('click', () => {
+      panelBody.classList.toggle('collapsed');
+      panelToggle.textContent = panelBody.classList.contains('collapsed') ? '展开' : '收起';
+    });
+    bindDropZone('tleDropZone', uploadTleFiles);
+    bindDropZone('imageDropZone', uploadImageFiles);
+    searchInput.addEventListener('input', () => searchSatellite(searchInput.value.trim()));
+    document.getElementById('saveNameBtn').addEventListener('click', saveCustomName);
+    document.getElementById('cancelNameBtn').addEventListener('click', () => { namingModal.style.display = 'none'; pendingTempId = ''; });
+    setTimeout(() => {
+      const report = window.__orbitwhisperReport;
+      if (!report || !Array.isArray(report.orbits)) return;
+      report.orbits.slice(0, 80).forEach(sat => {
+        const option = document.createElement('option');
+        option.value = sat.name || sat.asset_id;
+        hints.appendChild(option);
+      });
+    }, 600);
+  </script>
 </body>
 </html>

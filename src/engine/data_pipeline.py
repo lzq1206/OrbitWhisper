@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import json
 from pathlib import Path
 
 import pandas as pd
@@ -32,7 +33,27 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
-def build_daily_dataset(count: int = 300) -> PipelineOutput:
+def _load_real_tles(real_tles_path: Path | None) -> list[tuple[str, str]]:
+    if real_tles_path is None or not real_tles_path.exists():
+        return []
+    try:
+        payload = json.loads(real_tles_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return []
+
+    items = payload.get("tles", []) if isinstance(payload, dict) else []
+    parsed: list[tuple[str, str]] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        line1 = str(item.get("line1", "")).strip()
+        line2 = str(item.get("line2", "")).strip()
+        if line1.startswith("1 ") and line2.startswith("2 "):
+            parsed.append((line1, line2))
+    return parsed
+
+
+def build_daily_dataset(count: int = 300, real_tles_path: Path | None = None) -> PipelineOutput:
     """生成模拟输入数据。"""
 
     if count <= 0:
@@ -42,9 +63,12 @@ def build_daily_dataset(count: int = 300) -> PipelineOutput:
 
     tle_rows = []
     fin_rows = []
+    real_tles = _load_real_tles(real_tles_path)
+
     for i in range(count):
         sat_id = f"SAT-{i + 1:03d}"
-        line1, line2 = BASE_TLES[i % len(BASE_TLES)]
+        tle_pool = real_tles or BASE_TLES
+        line1, line2 = tle_pool[i % len(tle_pool)]
 
         # 轻微扰动，确保样本多样性
         solar_base = 95.0 + (i % 25) * 0.9

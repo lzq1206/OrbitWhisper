@@ -105,15 +105,12 @@ python -m unittest discover tests
 工作流文件：`.github/workflows/daily_compute.yml`
 
 - 触发：
-  - `schedule`: 每日 `00:10 UTC`
+  - `schedule`: 每 6 小时一次（`00:00 / 06:00 / 12:00 / 18:00 UTC`）
   - `workflow_dispatch`: 手动触发
 - 步骤：
-  1. checkout
-  2. setup-python (3.10)
-  3. 安装依赖
-  4. 运行 `src.engine` 计算并生成 JSON
-  5. 生成 Markdown 摘要
-  6. 发布 `public/` 到 `gh-pages`
+  1. **collect-real-tles**：从 Space-Track 拉取真实 TLE（未配置密钥时自动回退）
+  2. **compute-and-deploy**：运行 `src.engine` 计算并生成 JSON/Markdown
+  3. 发布 `public/` 到 `gh-pages`（网页随仓库改动自动更新）
 
 ---
 
