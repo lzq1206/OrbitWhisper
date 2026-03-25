@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import numpy as np
 import pandas as pd
 from lifelines import CoxPHFitter
 
@@ -73,7 +74,7 @@ class OrbitCoxSurvivalModel:
             raise ValueError("satellite_features cannot be empty")
 
         aligned = satellite_features.reindex(columns=self._training_columns, fill_value=0.0).astype(float)
-        timeline = [int(round(x)) for x in pd.Series(range(0, steps + 1)) * (horizon_days / steps)]
+        timeline = np.linspace(0, horizon_days, steps + 1).astype(int)
         survival = self.model.predict_survival_function(aligned, times=timeline)
         survival.index.name = "timeline_days"
         return survival
@@ -102,4 +103,3 @@ class OrbitCoxSurvivalModel:
             raise ValueError("loading must be non-negative")
         el = OrbitCoxSurvivalModel.expected_loss(pof, exposure_amount, lgf)
         return float(el * (1.0 + loading))
-

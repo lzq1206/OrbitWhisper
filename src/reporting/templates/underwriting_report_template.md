@@ -51,4 +51,3 @@ SHAP 风险因子解释图：
 ## 5. 核保意见
 
 {{ underwriting_recommendation }}
-

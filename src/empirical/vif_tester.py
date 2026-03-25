@@ -52,7 +52,7 @@ class VIFTester:
             (filtered_features, vif_report)
         """
         X = self._prepare_numeric(df_features)
-        dropped: list[str] = []
+        dropped_rows: list[dict[str, float | str]] = []
 
         while X.shape[1] > 1:
             vif_table = self.compute_vif(X)
@@ -60,11 +60,11 @@ class VIFTester:
             if float(max_row["vif"]) <= self.threshold:
                 break
             to_drop = str(max_row["feature"])
-            dropped.append(to_drop)
+            dropped_rows.append({"feature": to_drop, "vif": float(max_row["vif"]), "status": "dropped"})
             X = X.drop(columns=[to_drop])
 
         final_vif = self.compute_vif(X)
-        dropped_report = pd.DataFrame({"feature": dropped, "vif": float("nan"), "status": "dropped"})
+        dropped_report = pd.DataFrame(dropped_rows)
         kept_report = final_vif.assign(status="kept")
         vif_report = pd.concat([kept_report, dropped_report], ignore_index=True)
         return X, vif_report
