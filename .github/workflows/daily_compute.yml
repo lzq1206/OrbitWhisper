@@ -44,8 +44,9 @@ jobs:
 
           if not (os.getenv("SPACETRACK_USER") and os.getenv("SPACETRACK_PWD")):
               output_path.write_text(json.dumps({"source": "fallback", "tles": []}, ensure_ascii=False, indent=2), encoding="utf-8")
-              print("Space-Track credentials not configured, using fallback.")
-              raise SystemExit(0)
+              print("WARNING: Space-Track credentials not configured, using fallback dataset without real TLEs.")
+              import sys
+              sys.exit(0)
 
           ids = [25544, 40967, 33591, 43013, 44713]
           client = SpaceTrackClient()

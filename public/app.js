@@ -9,7 +9,13 @@
   `;
 
   if (window.Cesium) {
-    Cesium.Ion.defaultAccessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIzY2ZlZjYxZi1kOGM1LTRhN2MtOGRhNi1mMDBkMWEwNjZlYTkiLCJpZCI6NDA4NzUzLCJpYXQiOjE3NzQ0MDkwMTl9.StFh8-TIWbpATRQHRmTiHtxHGeRWFSc6SNsUcESHmhc";
+    const fallbackToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIzY2ZlZjYxZi1kOGM1LTRhN2MtOGRhNi1mMDBkMWEwNjZlYTkiLCJpZCI6NDA4NzUzLCJpYXQiOjE3NzQ0MDkwMTl9.StFh8-TIWbpATRQHRmTiHtxHGeRWFSc6SNsUcESHmhc";
+    Cesium.Ion.defaultAccessToken = window.CESIUM_ACCESS_TOKEN || fallbackToken;
+    const safeAltitudeMeters = (altKm) => {
+      const alt = Number(altKm);
+      if (!Number.isFinite(alt)) return 550000; // 默认 550km，近似低轨高度，避免无效数据导致实体消失
+      return Math.max(alt, 0) * 1000;
+    };
     const viewer = new Cesium.Viewer("cesiumContainer", {
       animation: false,
       timeline: false,
@@ -26,7 +32,7 @@
       viewer.entities.add({
         id: orbit.asset_id,
         name: orbit.name,
-        position: Cesium.Cartesian3.fromDegrees(orbit.lng, orbit.lat, Math.max(0, orbit.alt) * 1000),
+        position: Cesium.Cartesian3.fromDegrees(orbit.lng, orbit.lat, safeAltitudeMeters(orbit.alt)),
         point: { pixelSize: 9, color: Cesium.Color.CYAN },
         label: {
           text: orbit.asset_id,
@@ -46,7 +52,7 @@
       const orbit = orbitMap[key];
       if (!orbit) return false;
       viewer.camera.flyTo({
-        destination: Cesium.Cartesian3.fromDegrees(orbit.lng, orbit.lat, Math.max(0, orbit.alt) * 1000 + 600000),
+        destination: Cesium.Cartesian3.fromDegrees(orbit.lng, orbit.lat, safeAltitudeMeters(orbit.alt) + 600000),
         duration: 1.2,
       });
       return true;

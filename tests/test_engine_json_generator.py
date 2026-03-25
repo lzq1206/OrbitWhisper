@@ -6,6 +6,9 @@ from pathlib import Path
 from src.engine.json_generator import generate_daily_outputs
 
 
+SATELLITE_COUNT = 300
+
+
 class TestEngineJsonGenerator(unittest.TestCase):
     def test_generate_daily_outputs_writes_required_hud_and_satellite_schema(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -40,14 +43,14 @@ class TestEngineJsonGenerator(unittest.TestCase):
             self.assertIn("total_premium_var", hud)
 
             satellites = payload["satellites"]
-            self.assertEqual(len(satellites), 300)
+            self.assertEqual(len(satellites), SATELLITE_COUNT)
             first = satellites[0]
             self.assertEqual(
                 set(first.keys()),
                 {"id", "lat", "lng", "alt", "radius", "color", "pof", "suggested_premium"},
             )
             self.assertIn(first["color"], {"#00ffcc", "#ff0044"})
-            self.assertEqual(len(payload["orbits"]), 300)
+            self.assertEqual(len(payload["orbits"]), SATELLITE_COUNT)
             self.assertEqual(
                 set(payload["asset_pricing"][0].keys()),
                 {"asset_id", "pof_12m", "expected_loss", "pure_premium", "survival_curve"},

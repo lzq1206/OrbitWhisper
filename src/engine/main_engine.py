@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 import sys
 
@@ -97,9 +98,7 @@ def _build_satellite_payload(dataset, pricing_results):
                 {
                     "asset_id": sat_id,
                     "counterpart_id": peer_id,
-                    "tca_utc": (
-                        tca["tca"].replace(microsecond=0).isoformat() if tca["tca"] is not None else dataset.generated_at
-                    ),
+                    "tca_utc": tca["tca"].replace(microsecond=0).isoformat() if tca["tca"] is not None else None,
                     "miss_distance_km": round(float(tca["min_distance_km"]), 6),
                     "poc": round(float(tca["poc"]), 8),
                 }
@@ -112,7 +111,7 @@ def _build_satellite_payload(dataset, pricing_results):
                 "expected_loss": round(float(price.expected_loss), 2) if price else 0.0,
                 "pure_premium": round(premium, 2),
                 "survival_curve": [
-                    {"timeline_days": day, "survival_prob": round(max(0.0, 1.0 - pof * day / 365.0), 6)}
+                    {"timeline_days": day, "survival_prob": round(math.exp(-pof * day / 365.0), 6)}
                     for day in (0, 30, 90, 180, 270, 365)
                 ],
             }
