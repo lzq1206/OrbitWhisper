@@ -1,4 +1,5 @@
 import json
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -11,9 +12,18 @@ class TestAppJsRefresh(unittest.TestCase):
         app_js = project_root / "app.js"
         source = app_js.read_text(encoding="utf-8")
 
-        self.assertIn("window.__orbitwhisperCheckForReportUpdate = checkForReportUpdate;", source)
-        self.assertIn("if (options.dryRun) return true;", source)
-        self.assertIn("setInterval(checkForReportUpdate, 120000);", source)
+        self.assertRegex(
+            source,
+            re.compile(r"window\.__orbitwhisperCheckForReportUpdate\s*=\s*checkForReportUpdate\s*;"),
+        )
+        self.assertRegex(
+            source,
+            re.compile(r"if\s*\(\s*options\.dryRun\s*\)\s*return\s+true\s*;"),
+        )
+        self.assertRegex(
+            source,
+            re.compile(r"setInterval\s*\(\s*checkForReportUpdate\s*,\s*120000\s*\)\s*;"),
+        )
 
     def test_engine_writes_data_under_root_data_dir(self):
         from src.engine.json_generator import generate_daily_outputs

@@ -127,11 +127,15 @@
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json();
       });
-      if (latest?.generated_at && latest.generated_at !== window.__orbitwhisperReport?.generated_at) {
+      const latestGeneratedAt = latest?.generated_at == null ? "" : String(latest.generated_at);
+      const currentGeneratedAt = window.__orbitwhisperReport?.generated_at == null ? "" : String(window.__orbitwhisperReport.generated_at);
+      if (latestGeneratedAt && latestGeneratedAt !== currentGeneratedAt) {
         if (options.dryRun) return true;
         window.location.reload();
       }
-    } catch (_) {}
+    } catch (err) {
+      console.debug("OrbitWhisper refresh check failed:", err);
+    }
     return false;
   }
 
