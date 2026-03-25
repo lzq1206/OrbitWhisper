@@ -57,7 +57,7 @@ def extract_point_sources(
         return []
 
     if DAOStarFinder is not None and sigma_clipped_stats is not None:
-        mean, median, std = sigma_clipped_stats(data, sigma=3.0)
+        _, median, std = sigma_clipped_stats(data, sigma=3.0)
         finder = DAOStarFinder(fwhm=fwhm, threshold=threshold_sigma * max(std, 1e-6))
         table = finder(data - median)
         if table is None:

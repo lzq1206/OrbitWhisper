@@ -255,7 +255,8 @@
                 const data = await resp.json();
                 statusText.textContent = `解算完成：提取目标 ${data.observation_targets.length} 个`;
                 if (data.unknown_target_suggestion) {
-                    showNamingModal(data.unknown_target_suggestion, `UNKN-${new Date().getUTCFullYear()}-A`);
+                    const generatedTempId = data.unknown_temp_id || `UNKN-${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}`;
+                    showNamingModal(data.unknown_target_suggestion, generatedTempId);
                 }
             } catch (err) {
                 statusText.textContent = `图片上传失败: ${err.message}`;

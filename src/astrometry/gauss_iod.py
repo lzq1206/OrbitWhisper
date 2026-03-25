@@ -75,17 +75,30 @@ def state_to_keplerian(r_eci_km: np.ndarray, v_eci_km_s: np.ndarray, mu: float =
     energy = 0.5 * v_norm**2 - mu / r_norm
     a = -mu / (2.0 * energy) if abs(energy) > 1e-10 else float("inf")
 
-    i = acos(max(-1.0, min(1.0, h_vec[2] / max(h, 1e-12))))
+    inclination_ratio = h_vec[2] / max(h, 1e-12)
+    inclination_ratio = max(-1.0, min(1.0, inclination_ratio))
+    i = acos(inclination_ratio)
     raan = atan2(n_vec[1], n_vec[0]) if n > 1e-12 else 0.0
-    argp = atan2(np.dot(np.cross(n_vec, e_vec), h_vec) / max(n * h, 1e-12), np.dot(n_vec, e_vec) / max(n, 1e-12)) if n > 1e-12 and e > 1e-12 else 0.0
-    nu = atan2(np.dot(np.cross(e_vec, r), h_vec) / max(e * h, 1e-12), np.dot(e_vec, r) / max(e, 1e-12)) if e > 1e-12 else 0.0
+    if n > 1e-12 and e > 1e-12:
+        argp_num = np.dot(np.cross(n_vec, e_vec), h_vec) / max(n * h, 1e-12)
+        argp_den = np.dot(n_vec, e_vec) / max(n, 1e-12)
+        argp = atan2(argp_num, argp_den)
+    else:
+        argp = 0.0
+
+    if e > 1e-12:
+        nu_num = np.dot(np.cross(e_vec, r), h_vec) / max(e * h, 1e-12)
+        nu_den = np.dot(e_vec, r) / max(e, 1e-12)
+        nu = atan2(nu_num, nu_den)
+    else:
+        nu = 0.0
 
     mean_motion_rev_day = sqrt(mu / (a**3)) * (86400.0 / (2.0 * pi)) if a > 0 and np.isfinite(a) else 0.0
 
     return {
         "semi_major_axis_km": float(a),
         "eccentricity": float(e),
-        "inclination_deg": float(np.rad2deg(i) % 360),
+        "inclination_deg": float(np.rad2deg(i)),
         "raan_deg": float(np.rad2deg(raan) % 360),
         "arg_perigee_deg": float(np.rad2deg(argp) % 360),
         "true_anomaly_deg": float(np.rad2deg(nu) % 360),
@@ -110,8 +123,12 @@ def state_to_tle(
     international_designator: str = "26001A",
 ) -> dict[str, str]:
     """Generate a pragmatic TLE pair from keplerian elements."""
+    if epoch.tzinfo is None:
+        epoch_start_year = datetime(epoch.year, 1, 1)
+    else:
+        epoch_start_year = datetime(epoch.year, 1, 1, tzinfo=epoch.tzinfo)
     year = epoch.year % 100
-    day_of_year = (epoch - datetime(epoch.year, 1, 1, tzinfo=epoch.tzinfo)).total_seconds() / 86400.0 + 1.0
+    day_of_year = (epoch - epoch_start_year).total_seconds() / 86400.0 + 1.0
     ecc_str = f"{keplerian['eccentricity']:.7f}".split(".")[1][:7]
 
     line1_core = (

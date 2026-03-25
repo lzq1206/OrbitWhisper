@@ -65,14 +65,24 @@ def _parse_timestamps(raw: str | None, n: int) -> list[datetime]:
     if raw:
         try:
             data = json.loads(raw)
-            if not isinstance(data, list):
-                raise ValueError
-            times = [datetime.fromisoformat(str(t)) for t in data]
-            if len(times) != n:
-                raise ValueError
-            return times
-        except Exception as exc:
-            raise HTTPException(status_code=400, detail="timestamps must be ISO datetime JSON list matching file count") from exc
+        except json.JSONDecodeError as exc:
+            raise HTTPException(status_code=400, detail="timestamps must be a JSON array of ISO datetime strings") from exc
+
+        if not isinstance(data, list):
+            raise HTTPException(status_code=400, detail="timestamps must be a JSON list")
+        if len(data) != n:
+            raise HTTPException(status_code=400, detail="timestamps length must match the number of uploaded files")
+
+        times: list[datetime] = []
+        for idx, ts in enumerate(data):
+            try:
+                times.append(datetime.fromisoformat(str(ts)))
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"timestamps[{idx}] must be a valid ISO datetime string",
+                ) from exc
+        return times
 
     return [datetime.now(timezone.utc) for _ in range(n)]
 
@@ -135,13 +145,14 @@ async def upload_image(
 
     unknown_suggestion = None
     if iod_result is not None:
-        unknown_suggestion = f"Astro-X{len(UPLOADED_TLES) + 1}"
+        unknown_suggestion = f"Astro-X{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
 
     return {
         "frames": frame_results,
         "observation_targets": extracted_targets,
         "iod_result": iod_result,
         "unknown_target_suggestion": unknown_suggestion,
+        "unknown_temp_id": f"UNKN-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}" if iod_result else None,
     }
 
 
