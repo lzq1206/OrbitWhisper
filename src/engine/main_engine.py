@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 import sys
 
@@ -30,6 +31,9 @@ def _build_satellite_payload(dataset, pricing_results):
     propagator = OrbitalPropagator(step_minutes=30)
 
     satellites = []
+    orbits = []
+    high_risk_events = []
+    asset_pricing = []
     high_risk_count = 0
 
     tle_df = dataset.tle.reset_index(drop=True)
@@ -79,26 +83,66 @@ def _build_satellite_payload(dataset, pricing_results):
             }
         )
 
-    return satellites, high_risk_count
+        orbits.append(
+            {
+                "asset_id": sat_id,
+                "name": sat_id,
+                "lat": round(lat, 6),
+                "lng": round(lng, 6),
+                "alt": round(alt, 6),
+            }
+        )
+
+        if is_high_risk:
+            high_risk_events.append(
+                {
+                    "asset_id": sat_id,
+                    "counterpart_id": peer_id,
+                    "tca_utc": tca["tca"].replace(microsecond=0).isoformat() if tca["tca"] is not None else None,
+                    "miss_distance_km": round(float(tca["min_distance_km"]), 6),
+                    "poc": round(float(tca["poc"]), 8),
+                }
+            )
+
+        asset_pricing.append(
+            {
+                "asset_id": sat_id,
+                "pof_12m": round(pof, 6),
+                "expected_loss": round(float(price.expected_loss), 2) if price else 0.0,
+                "pure_premium": round(premium, 2),
+                "survival_curve": [
+                    {"timeline_days": day, "survival_prob": round(math.exp(-pof * day / 365.0), 6)}
+                    for day in (0, 30, 90, 180, 270, 365)
+                ],
+            }
+        )
+
+    return satellites, high_risk_count, orbits, high_risk_events, asset_pricing
 
 
 def run_engine(output_path: Path | None = None) -> Path:
     """执行全流程并输出 JSON 报告。"""
 
-    dataset = build_daily_dataset(count=300)
+    final_path = output_path or (Path.cwd() / "public" / "data" / "daily_report.json")
+    latest_tles_path = final_path.parent / "latest_tles.json"
+
+    dataset = build_daily_dataset(count=300, real_tles_path=latest_tles_path)
     pricing_results, _ = compute_asset_pricing(dataset.finance)
-    satellites, high_risk_count = _build_satellite_payload(dataset, pricing_results)
+    satellites, high_risk_count, orbits, high_risk_events, asset_pricing = _build_satellite_payload(dataset, pricing_results)
 
     report = {
+        "generated_at": dataset.generated_at,
         "hud_data": {
             "status": "风险监控中",
             "high_risk_count": high_risk_count,
             "total_premium_var": _premium_var([s["suggested_premium"] for s in satellites]),
         },
         "satellites": satellites,
+        "orbits": orbits,
+        "high_risk_events": high_risk_events,
+        "asset_pricing": asset_pricing,
     }
 
-    final_path = output_path or (Path.cwd() / "public" / "data" / "daily_report.json")
     final_path.parent.mkdir(parents=True, exist_ok=True)
     final_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     return final_path

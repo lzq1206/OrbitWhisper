@@ -2,14 +2,77 @@ name: daily-compute-and-pages
 
 on:
   schedule:
-    - cron: "10 0 * * *"
+    - cron: "0 0,6,12,18 * * *"
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
+  collect-real-tles:
+    runs-on: ubuntu-latest
+    outputs:
+      tle_artifact: latest-tles
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Fetch real TLEs from Space-Track
+        env:
+          SPACETRACK_USER: ${{ secrets.SPACETRACK_USER }}
+          SPACETRACK_PWD: ${{ secrets.SPACETRACK_PWD }}
+        run: |
+          python - <<'PY'
+          import os
+          import json
+          from pathlib import Path
+
+          from src.data.tle_fetcher import SpaceTrackClient
+
+          output_path = Path("public/data/latest_tles.json")
+          output_path.parent.mkdir(parents=True, exist_ok=True)
+
+          if not (os.getenv("SPACETRACK_USER") and os.getenv("SPACETRACK_PWD")):
+              output_path.write_text(json.dumps({"source": "fallback", "tles": []}, ensure_ascii=False, indent=2), encoding="utf-8")
+              print("WARNING: Space-Track credentials not configured, using fallback dataset without real TLEs.")
+              import sys
+              sys.exit(0)
+
+          ids = [25544, 40967, 33591, 43013, 44713]
+          client = SpaceTrackClient()
+          tles = []
+          for norad in ids:
+              try:
+                  rec = client.get_latest_tle(norad)
+                  tles.append({"norad_id": norad, "line1": rec["line1"], "line2": rec["line2"]})
+              except Exception:
+                  continue
+          output_path.write_text(
+              json.dumps({"source": "space-track", "count": len(tles), "tles": tles}, ensure_ascii=False, indent=2),
+              encoding="utf-8",
+          )
+          print(f"Fetched {len(tles)} TLE records.")
+          PY
+
+      - name: Upload TLE artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: latest-tles
+          path: public/data/latest_tles.json
+          retention-days: 1
+
   compute-and-deploy:
+    needs: collect-real-tles
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -24,6 +87,12 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+
+      - name: Download TLE artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: latest-tles
+          path: public/data
 
       - name: Run daily compute pipeline
         run: |
@@ -54,4 +123,3 @@ jobs:
           publish_branch: gh-pages
           publish_dir: ./public
           force_orphan: true
-
