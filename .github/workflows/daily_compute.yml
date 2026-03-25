@@ -1,0 +1,57 @@
+name: daily-compute-and-pages
+
+on:
+  schedule:
+    - cron: "10 0 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  compute-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run daily compute pipeline
+        run: |
+          python -m src.engine.json_generator
+
+      - name: Generate markdown summary
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path("public/data/daily_report.json").read_text(encoding="utf-8"))
+          lines = [
+              "# AstroQuant 3D Daily Compute Report",
+              "",
+              f"- Generated at: `{report['generated_at']}`",
+              f"- Collision events: **{len(report.get('collision_events', []))}**",
+              f"- High risk events (<5km): **{len(report.get('high_risk_events', []))}**",
+              f"- Priced assets: **{len(report.get('asset_pricing', []))}**",
+              "",
+          ]
+          Path("public/data/daily_report.md").write_text("\n".join(lines), encoding="utf-8")
+          PY
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: ./public
+          force_orphan: true
+
