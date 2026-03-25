@@ -1,5 +1,15 @@
 (async function bootstrap() {
-  const report = await fetch("./data/daily_report.json").then((r) => r.json());
+  let report;
+  try {
+    report = await fetch("./data/daily_report.json", { cache: "no-store" }).then((r) => {
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json();
+    });
+  } catch (err) {
+    const summary = document.getElementById("summary");
+    summary.innerHTML = `<div class="metric warn">数据加载失败: ${err.message}</div>`;
+    return;
+  }
   window.__orbitwhisperReport = report;
   const summary = document.getElementById("summary");
   summary.innerHTML = `
@@ -28,8 +38,9 @@
     window.__orbitwhisperViewer = viewer;
     viewer.scene.globe.enableLighting = true;
 
+    const entityMap = {};
     report.orbits.forEach((orbit) => {
-      viewer.entities.add({
+      const entity = viewer.entities.add({
         id: orbit.asset_id,
         name: orbit.name,
         position: Cesium.Cartesian3.fromDegrees(orbit.lng, orbit.lat, safeAltitudeMeters(orbit.alt)),
@@ -42,6 +53,7 @@
           backgroundColor: Cesium.Color.fromAlpha(Cesium.Color.BLACK, 0.6),
         },
       });
+      entityMap[orbit.asset_id.toLowerCase()] = entity;
     });
     const orbitMap = Object.fromEntries(
       report.orbits.map((orbit) => [orbit.asset_id.toLowerCase(), orbit]),
@@ -51,6 +63,8 @@
       if (!key) return false;
       const orbit = orbitMap[key];
       if (!orbit) return false;
+      const entity = entityMap[key];
+      if (entity) viewer.trackedEntity = entity;
       viewer.camera.flyTo({
         destination: Cesium.Cartesian3.fromDegrees(orbit.lng, orbit.lat, safeAltitudeMeters(orbit.alt) + 600000),
         duration: 1.2,
@@ -106,4 +120,21 @@
       ],
     });
   }
+
+  async function checkForReportUpdate(options = {}) {
+    try {
+      const latest = await fetch(`./data/daily_report.json?t=${Date.now()}`, { cache: "no-store" }).then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      });
+      if (latest?.generated_at && latest.generated_at !== window.__orbitwhisperReport?.generated_at) {
+        if (options.dryRun) return true;
+        window.location.reload();
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  window.__orbitwhisperCheckForReportUpdate = checkForReportUpdate;
+  setInterval(checkForReportUpdate, 120000);
 })();

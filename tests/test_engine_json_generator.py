@@ -12,7 +12,7 @@ SATELLITE_COUNT = 300
 class TestEngineJsonGenerator(unittest.TestCase):
     def test_generate_daily_outputs_writes_required_hud_and_satellite_schema(self):
         with tempfile.TemporaryDirectory() as tmpdir:
-            data_dir = Path(tmpdir) / "public" / "data"
+            data_dir = Path(tmpdir) / "data"
             data_dir.mkdir(parents=True, exist_ok=True)
             data_dir.joinpath("latest_tles.json").write_text(
                 json.dumps(

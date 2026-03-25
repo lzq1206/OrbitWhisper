@@ -10,7 +10,7 @@ from src.engine.main_engine import run_engine
 
 def generate_daily_outputs(base_dir: Path | None = None) -> Path:
     root = base_dir or Path.cwd()
-    report_path = root / "public" / "data" / "daily_report.json"
+    report_path = root / "data" / "daily_report.json"
     return run_engine(output_path=report_path)
 
 
