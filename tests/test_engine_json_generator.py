@@ -48,7 +48,7 @@ class TestEngineJsonGenerator(unittest.TestCase):
             first = satellites[0]
             self.assertEqual(
                 set(first.keys()),
-                {"id", "lat", "lng", "alt", "radius", "color", "pof", "suggested_premium"},
+                {"id", "lat", "lng", "alt", "radius", "color", "is_high_risk", "pof", "suggested_premium"},
             )
             self.assertIn(first["color"], {"#00ffcc", "#ff0044"})
             self.assertEqual(len(payload["orbits"]), SATELLITE_COUNT)

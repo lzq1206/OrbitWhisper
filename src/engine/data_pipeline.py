@@ -10,6 +10,9 @@ from pathlib import Path
 import pandas as pd
 import requests
 
+NOAA_F107_URL = "https://services.swpc.noaa.gov/products/summary/10cm-flux.json"
+NOAA_KP_URL = "https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json"
+
 
 BASE_TLES = [
     (
@@ -56,6 +59,7 @@ def _load_real_tles(real_tles_path: Path | None) -> list[tuple[str, str]]:
 
 
 def _safe_float(value, default: float) -> float:
+    """Convert value to float; return default when conversion fails."""
     try:
         return float(value)
     except (TypeError, ValueError):
@@ -63,14 +67,12 @@ def _safe_float(value, default: float) -> float:
 
 
 def _fetch_space_weather() -> dict[str, float]:
-    f107_url = "https://services.swpc.noaa.gov/products/summary/10cm-flux.json"
-    kp_url = "https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json"
-
+    """Fetch NOAA F10.7/Kp values and return normalized weather features."""
     f107 = 90.0
     kp = 2.0
 
     try:
-        resp = requests.get(f107_url, timeout=3)
+        resp = requests.get(NOAA_F107_URL, timeout=3)
         resp.raise_for_status()
         payload = resp.json()
         if isinstance(payload, dict):
@@ -79,11 +81,13 @@ def _fetch_space_weather() -> dict[str, float]:
         pass
 
     try:
-        resp = requests.get(kp_url, timeout=3)
+        resp = requests.get(NOAA_KP_URL, timeout=3)
         resp.raise_for_status()
         payload = resp.json()
-        if isinstance(payload, list) and len(payload) > 1 and isinstance(payload[-1], list) and len(payload[-1]) >= 2:
-            kp = _safe_float(payload[-1][1], kp)
+        if isinstance(payload, list) and len(payload) > 1:
+            last_entry = payload[-1]
+            if isinstance(last_entry, list) and len(last_entry) >= 2:
+                kp = _safe_float(last_entry[1], kp)
     except (requests.RequestException, ValueError):
         pass
 

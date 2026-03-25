@@ -78,6 +78,7 @@ def _build_satellite_payload(dataset, pricing_results):
                 "alt": round(alt, 6),
                 "radius": 0.8 if is_high_risk else 0.5,
                 "color": "#ff0044" if is_high_risk else "#00ffcc",
+                "is_high_risk": is_high_risk,
                 "pof": round(pof, 6),
                 "suggested_premium": round(premium, 2),
             }
