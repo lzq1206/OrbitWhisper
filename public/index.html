@@ -1,36 +1,75 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="zh-CN">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AstroQuant 3D - OrbitWhisper</title>
-    <link
-      rel="stylesheet"
-      href="https://cdn.jsdelivr.net/npm/cesium@1.120/Build/Cesium/Widgets/widgets.css"
-    />
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OrbitWhisper | 3D 在轨资产风险终端</title>
     <style>
-      html, body, #cesiumContainer { margin: 0; width: 100%; height: 100%; overflow: hidden; }
-      #hud {
-        position: absolute; top: 12px; right: 12px; width: min(420px, 36vw); max-height: 90vh; overflow: auto;
-        background: rgba(9, 14, 26, 0.82); color: #e5ecff; border: 1px solid rgba(120, 160, 255, 0.4);
-        border-radius: 10px; padding: 12px; font-family: Arial, sans-serif; backdrop-filter: blur(4px);
-      }
-      .warn { color: #ff6b6b; }
-      .metric { margin: 4px 0; font-size: 13px; }
-      #survivalChart { width: 100%; height: 220px; }
+        body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; }
+        #hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: #00ffcc;
+            background: rgba(0, 20, 40, 0.8);
+            padding: 20px;
+            border: 1px solid #00ffcc;
+            border-radius: 8px;
+            z-index: 10;
+            backdrop-filter: blur(5px);
+        }
+        h1 { font-size: 1.5rem; margin: 0 0 10px 0; }
+        p { font-size: 0.9rem; margin: 5px 0; color: #ccc; }
     </style>
-  </head>
-  <body>
-    <div id="cesiumContainer"></div>
-    <aside id="hud">
-      <h3>AstroQuant 3D HUD</h3>
-      <div id="summary"></div>
-      <div id="survivalChart"></div>
-    </aside>
+    <script src="https://unpkg.com/three@0.136.0/build/three.min.js"></script>
+    <script src="https://unpkg.com/globe.gl@2.32.0/dist/globe.gl.min.js"></script>
+</head>
+<body>
+    <div id="hud">
+        <h1>OrbitWhisper 风险评估引擎</h1>
+        <p>资产状态: <span style="color: #00ff00;">监控中</span></p>
+        <p>当前渲染目标: 300 颗模拟卫星</p>
+        <p>动态保费建议: 等待精算模型...</p>
+    </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/cesium@1.120/Build/Cesium/Cesium.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
-    <script src="./app.js"></script>
-  </body>
-  </html>
+    <div id="globeViz"></div>
 
+    <script>
+        // 1. 初始化 3D 地球 (强制 HTTPS 贴图)
+        const world = Globe()
+            (document.getElementById('globeViz'))
+            .globeImageUrl('https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg')
+            .bumpImageUrl('https://unpkg.com/three-globe/example/img/earth-topology.png')
+            .backgroundImageUrl('https://unpkg.com/three-globe/example/img/night-sky.png');
+
+        // 设置初始视角和自动旋转
+        world.pointOfView({ altitude: 2.5 });
+        world.controls().autoRotate = true;
+        world.controls().autoRotateSpeed = 0.5;
+
+        // 2. 生成模拟的卫星数据 (Mock Data)
+        // 随机生成 300 颗低轨卫星，模拟高危(红色)和健康(青色)资产
+        const N = 300;
+        const mockSatellites = [...Array(N).keys()].map(() => ({
+            lat: (Math.random() - 0.5) * 180,
+            lng: (Math.random() - 0.5) * 360,
+            alt: Math.random() * 0.4 + 0.1, // 轨道高度
+            radius: Math.random() * 1.2 + 0.3, // 卫星模型大小
+            // 随机分配状态颜色：80%正常(青绿)，20%高危交会预警(红色)
+            color: Math.random() > 0.8 ? '#ff0044' : '#00ffcc' 
+        }));
+
+        // 3. 将卫星渲染到地球周围
+        world.objectsData(mockSatellites)
+            .objectLat('lat')
+            .objectLng('lng')
+            .objectAltitude('alt')
+            .objectThreeObject(d => {
+                // 使用 Three.js 画一个小发光球体代表卫星
+                const geometry = new THREE.SphereGeometry(d.radius, 16, 16);
+                const material = new THREE.MeshBasicMaterial({ color: d.color });
+                return new THREE.Mesh(geometry, material);
+            });
+    </script>
+</body>
+</html>
