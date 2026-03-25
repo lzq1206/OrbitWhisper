@@ -81,3 +81,41 @@ class SpaceTrackClient:
         parsed = self._parse_tle_text(response.text)
         parsed["norad_id"] = norad_id
         return parsed
+
+    def get_latest_tle_by_ids(self, norad_ids: list[int]) -> list[dict[str, Any]]:
+        """Fetch latest TLEs in batch for multiple NORAD IDs."""
+        self._login()
+        if not norad_ids:
+            return []
+
+        id_str = ",".join(str(int(norad_id)) for norad_id in norad_ids)
+        query_url = (
+            "https://www.space-track.org/basicspacedata/query/"
+            f"class/tle_latest/NORAD_CAT_ID/{id_str}/ORDINAL/1/FORMAT/json"
+        )
+        logger.info("Fetching latest TLEs for %d NORAD IDs", len(norad_ids))
+        try:
+            response = self.session.get(query_url, timeout=self.timeout)
+            response.raise_for_status()
+            payload = response.json()
+        except (requests.RequestException, ValueError) as exc:
+            logger.exception("Failed retrieving batched TLEs")
+            raise RuntimeError("Space-Track batch query failed") from exc
+
+        if not isinstance(payload, list):
+            return []
+
+        rows: list[dict[str, Any]] = []
+        for item in payload:
+            if not isinstance(item, dict):
+                continue
+            line1 = str(item.get("TLE_LINE1", "")).strip()
+            line2 = str(item.get("TLE_LINE2", "")).strip()
+            if not (line1.startswith("1 ") and line2.startswith("2 ")):
+                continue
+            try:
+                norad_id = int(item.get("NORAD_CAT_ID"))
+            except (TypeError, ValueError):
+                continue
+            rows.append({"norad_id": norad_id, "line1": line1, "line2": line2})
+        return rows

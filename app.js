@@ -11,8 +11,19 @@
     return;
   }
   window.__orbitwhisperReport = report;
-  const summary = document.getElementById("summary");
-  summary.innerHTML = `
+  const hud = document.getElementById("hud");
+  const hudData = report.hud_data || {};
+  const isHudAlert = String(hudData.status || "").includes("警报");
+  hud.innerHTML = `
+    <h1>AstroQuant 风险评估终端</h1>
+    <p>资产状态: <span style="color: ${isHudAlert ? "#ff0044" : "#00ff00"};">${hudData.status || "风险监控中"}</span></p>
+    <p>高危交会预警: ${Number(hudData.high_risk_count || 0)} 起</p>
+    <p>全盘动态保费: ${hudData.total_premium_var || "+0.0%"}</p>
+    <p style="font-size: 0.7rem; color: #666;">最后更新: ${hudData.update_time || report.generated_at || "-"}</p>
+    <div id="summary"></div>
+  `;
+  const renderedSummary = document.getElementById("summary");
+  renderedSummary.innerHTML = `
     <div class="metric">生成时间: ${report.generated_at}</div>
     <div class="metric">资产数量: ${report.asset_pricing.length}</div>
     <div class="metric warn">高危交会事件: ${report.high_risk_events.length}</div>
@@ -39,12 +50,36 @@
     viewer.scene.globe.enableLighting = true;
 
     const entityMap = {};
+    const DEFAULT_SATELLITE_RADIUS = 0.5;
+    const DEFAULT_SATELLITE_COLOR = "#00ffcc";
+    const MIN_SATELLITE_RADIUS = 0.1;
+    const satelliteStyles = Object.fromEntries(
+      (report.satellites || []).map((s) => [
+        s.id,
+        {
+          radius: Number(s.radius || DEFAULT_SATELLITE_RADIUS),
+          color: String(s.color || DEFAULT_SATELLITE_COLOR),
+          isHighRisk: Boolean(s.is_high_risk),
+        },
+      ]),
+    );
+    const ELLIPSOID_SCALE_METERS = 4000; // 经验缩放：将 0.5~0.8 的业务半径映射为约 2~3.2km，可在地球场景稳定可见
     report.orbits.forEach((orbit) => {
+      const satStyle = satelliteStyles[orbit.asset_id] || {
+        radius: DEFAULT_SATELLITE_RADIUS,
+        color: DEFAULT_SATELLITE_COLOR,
+        isHighRisk: false,
+      };
+      const radius = Math.max(satStyle.radius, MIN_SATELLITE_RADIUS) * ELLIPSOID_SCALE_METERS;
       const entity = viewer.entities.add({
         id: orbit.asset_id,
         name: orbit.name,
         position: Cesium.Cartesian3.fromDegrees(orbit.lng, orbit.lat, safeAltitudeMeters(orbit.alt)),
         point: { pixelSize: 9, color: Cesium.Color.CYAN },
+        ellipsoid: {
+          radii: new Cesium.Cartesian3(radius, radius, radius),
+          material: satStyle.isHighRisk ? Cesium.Color.RED.withAlpha(0.75) : Cesium.Color.CYAN.withAlpha(0.6),
+        },
         label: {
           text: orbit.asset_id,
           font: "12px sans-serif",

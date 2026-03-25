@@ -8,6 +8,10 @@ import json
 from pathlib import Path
 
 import pandas as pd
+import requests
+
+NOAA_F107_URL = "https://services.swpc.noaa.gov/products/summary/10cm-flux.json"
+NOAA_KP_URL = "https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json"
 
 
 BASE_TLES = [
@@ -27,6 +31,7 @@ class PipelineOutput:
     tle: pd.DataFrame
     finance: pd.DataFrame
     generated_at: str
+    weather: dict[str, float]
 
 
 def _utc_now_iso() -> str:
@@ -53,6 +58,46 @@ def _load_real_tles(real_tles_path: Path | None) -> list[tuple[str, str]]:
     return parsed
 
 
+def _safe_float(value, default: float) -> float:
+    """Convert value to float; return default when conversion fails."""
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _fetch_space_weather() -> dict[str, float]:
+    """Fetch NOAA F10.7/Kp values and return normalized weather features."""
+    f107 = 90.0
+    kp = 2.0
+
+    try:
+        resp = requests.get(NOAA_F107_URL, timeout=3)
+        resp.raise_for_status()
+        payload = resp.json()
+        if isinstance(payload, dict):
+            f107 = _safe_float(payload.get("flux"), f107)
+    except (requests.RequestException, ValueError):
+        pass
+
+    try:
+        resp = requests.get(NOAA_KP_URL, timeout=3)
+        resp.raise_for_status()
+        payload = resp.json()
+        if isinstance(payload, list) and len(payload) > 1:
+            last_entry = payload[-1]
+            if isinstance(last_entry, list) and len(last_entry) >= 2:
+                kp = _safe_float(last_entry[1], kp)
+    except (requests.RequestException, ValueError):
+        pass
+
+    return {
+        "f107": f107,
+        "kp_index": kp,
+        "is_geomagnetic_storm": 1.0 if kp >= 5.0 else 0.0,
+    }
+
+
 def build_daily_dataset(count: int = 300, real_tles_path: Path | None = None) -> PipelineOutput:
     """生成模拟输入数据。"""
 
@@ -60,6 +105,7 @@ def build_daily_dataset(count: int = 300, real_tles_path: Path | None = None) ->
         raise ValueError("count 必须大于 0")
 
     generated_at = _utc_now_iso()
+    weather = _fetch_space_weather()
 
     tle_rows = []
     fin_rows = []
@@ -71,8 +117,8 @@ def build_daily_dataset(count: int = 300, real_tles_path: Path | None = None) ->
         line1, line2 = tle_pool[i % len(tle_pool)]
 
         # 轻微扰动，确保样本多样性
-        solar_base = 95.0 + (i % 25) * 0.9
-        kp_base = 1.5 + (i % 8) * 0.4
+        solar_base = weather["f107"] + (i % 25) * 0.25
+        kp_base = weather["kp_index"] + (i % 8) * 0.1
         age_years = 0.5 + (i % 12) * 0.4
         health = max(0.1, 0.98 - (i % 20) * 0.02)
 
@@ -95,7 +141,7 @@ def build_daily_dataset(count: int = 300, real_tles_path: Path | None = None) ->
     tle_df = pd.DataFrame(tle_rows)
     finance_df = pd.DataFrame(fin_rows)
 
-    return PipelineOutput(tle=tle_df, finance=finance_df, generated_at=generated_at)
+    return PipelineOutput(tle=tle_df, finance=finance_df, generated_at=generated_at, weather=weather)
 
 
 def save_pipeline_snapshot(output: PipelineOutput, out_dir: Path) -> None:
