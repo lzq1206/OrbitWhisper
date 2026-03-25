@@ -1,4 +1,4 @@
-"""Daily ETL pipeline for AstroQuant 3D static report generation."""
+"""模拟数据管道：构建 300 颗卫星的轨道与精算输入数据。"""
 
 from __future__ import annotations
 
@@ -9,13 +9,22 @@ from pathlib import Path
 import pandas as pd
 
 
+BASE_TLES = [
+    (
+        "1 25544U 98067A   24001.10000000  .00014266  00000+0  26094-3 0  9994",
+        "2 25544  51.6416  13.3500 0005001 130.5360 289.5733 15.49938556439616",
+    ),
+    (
+        "1 40967U 15058A   24001.30000000  .00000054  00000+0  00000+0 0  9996",
+        "2 40967   0.0172  88.2052 0002089 205.2228 262.0058  1.00270765 30287",
+    ),
+]
+
+
 @dataclass
 class PipelineOutput:
-    """Container for ETL outputs used by downstream compute modules."""
-
     tle: pd.DataFrame
-    space_weather: pd.DataFrame
-    maritime_notices: pd.DataFrame
+    finance: pd.DataFrame
     generated_at: str
 
 
@@ -23,58 +32,51 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
-def build_daily_dataset() -> PipelineOutput:
-    """Build deterministic placeholder dataset.
+def build_daily_dataset(count: int = 300) -> PipelineOutput:
+    """生成模拟输入数据。"""
 
-    The scaffold uses in-repo synthetic data so GitHub Actions can run without
-    external credentials. Real connectors can replace these stubs later.
-    """
+    if count <= 0:
+        raise ValueError("count 必须大于 0")
 
     generated_at = _utc_now_iso()
-    tle = pd.DataFrame(
-        [
+
+    tle_rows = []
+    fin_rows = []
+    for i in range(count):
+        sat_id = f"SAT-{i + 1:03d}"
+        line1, line2 = BASE_TLES[i % len(BASE_TLES)]
+
+        # 轻微扰动，确保样本多样性
+        solar_base = 95.0 + (i % 25) * 0.9
+        kp_base = 1.5 + (i % 8) * 0.4
+        age_years = 0.5 + (i % 12) * 0.4
+        health = max(0.1, 0.98 - (i % 20) * 0.02)
+
+        tle_rows.append({"id": sat_id, "line1": line1, "line2": line2})
+        fin_rows.append(
             {
-                "asset_id": "AQ-1001",
-                "name": "ORBITWHISPER-DEMO-1",
-                "line1": "1 25544U 98067A   24001.10000000  .00014266  00000+0  26094-3 0  9994",
-                "line2": "2 25544  51.6416  13.3500 0005001 130.5360 289.5733 15.49938556439616",
-            },
-            {
-                "asset_id": "AQ-1002",
-                "name": "ORBITWHISPER-DEMO-2",
-                "line1": "1 40967U 15058A   24001.30000000  .00000054  00000+0  00000+0 0  9996",
-                "line2": "2 40967   0.0172  88.2052 0002089 205.2228 262.0058  1.00270765 30287",
-            },
-        ]
-    )
-    space_weather = pd.DataFrame(
-        [
-            {"date": generated_at[:10], "f107": 129.4, "kp_index": 3.0},
-        ]
-    )
-    maritime_notices = pd.DataFrame(
-        [
-            {
-                "notice_id": "NAV-001",
-                "region": "South China Sea",
-                "risk_score": 0.35,
-                "valid_from": generated_at,
+                "id": sat_id,
+                "duration_days": 90 + (i % 240),
+                "event_observed": 1 if (i % 11 == 0 or health < 0.45) else 0,
+                "f107": solar_base,
+                "kp_index": kp_base,
+                "solar_wind_index": solar_base * 0.92 + 3.0,  # 人为构造共线因子
+                "asset_age_years": age_years,
+                "health_score": health,
+                "exposure_amount": 50_000_000.0 + (i % 10) * 8_000_000.0,
+                "lgf": 0.35 + (i % 6) * 0.07,
             }
-        ]
-    )
-    return PipelineOutput(
-        tle=tle,
-        space_weather=space_weather,
-        maritime_notices=maritime_notices,
-        generated_at=generated_at,
-    )
+        )
+
+    tle_df = pd.DataFrame(tle_rows)
+    finance_df = pd.DataFrame(fin_rows)
+
+    return PipelineOutput(tle=tle_df, finance=finance_df, generated_at=generated_at)
 
 
 def save_pipeline_snapshot(output: PipelineOutput, out_dir: Path) -> None:
-    """Persist ETL snapshot files for traceability in CI."""
+    """保存每日数据快照，便于 CI 或回溯分析。"""
 
     out_dir.mkdir(parents=True, exist_ok=True)
     output.tle.to_json(out_dir / "tle.json", orient="records", indent=2)
-    output.space_weather.to_json(out_dir / "space_weather.json", orient="records", indent=2)
-    output.maritime_notices.to_json(out_dir / "maritime_notices.json", orient="records", indent=2)
-
+    output.finance.to_json(out_dir / "finance.json", orient="records", indent=2)
