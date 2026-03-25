@@ -39,7 +39,7 @@ jobs:
 
           from src.data.tle_fetcher import SpaceTrackClient
 
-          output_path = Path("public/data/latest_tles.json")
+          output_path = Path("data/latest_tles.json")
           output_path.parent.mkdir(parents=True, exist_ok=True)
 
           if not (os.getenv("SPACETRACK_USER") and os.getenv("SPACETRACK_PWD")):
@@ -68,7 +68,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: latest-tles
-          path: public/data/latest_tles.json
+          path: data/latest_tles.json
           retention-days: 1
 
   compute-and-deploy:
@@ -92,7 +92,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: latest-tles
-          path: public/data
+          path: data
 
       - name: Run daily compute pipeline
         run: |
@@ -103,7 +103,7 @@ jobs:
           python - <<'PY'
           import json
           from pathlib import Path
-          report = json.loads(Path("public/data/daily_report.json").read_text(encoding="utf-8"))
+          report = json.loads(Path("data/daily_report.json").read_text(encoding="utf-8"))
           lines = [
               "# AstroQuant 3D Daily Compute Report",
               "",
@@ -113,7 +113,7 @@ jobs:
               f"- Priced assets: **{len(report.get('asset_pricing', []))}**",
               "",
           ]
-          Path("public/data/daily_report.md").write_text("\n".join(lines), encoding="utf-8")
+          Path("data/daily_report.md").write_text("\n".join(lines), encoding="utf-8")
           PY
 
       - name: Deploy to GitHub Pages
@@ -121,5 +121,5 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: gh-pages
-          publish_dir: ./public
+          publish_dir: ./
           force_orphan: true

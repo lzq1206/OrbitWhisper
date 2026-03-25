@@ -19,7 +19,7 @@ app = FastAPI(title="OrbitWhisper Optical IOD API", version="1.0.0")
 
 KNOWN_SATELLITES: list[dict[str, Any]] = []
 UPLOADED_TLES: list[dict[str, Any]] = []
-DB_PATH = Path(__file__).resolve().parents[2] / "public" / "data" / "satellites.db"
+DB_PATH = Path(__file__).resolve().parents[2] / "data" / "satellites.db"
 
 
 def _ensure_db() -> None:
@@ -40,7 +40,7 @@ def _ensure_db() -> None:
 def _load_known_satellites() -> None:
     if KNOWN_SATELLITES:
         return
-    report_path = Path(__file__).resolve().parents[2] / "public" / "data" / "daily_report.json"
+    report_path = Path(__file__).resolve().parents[2] / "data" / "daily_report.json"
     if report_path.exists():
         payload = json.loads(report_path.read_text(encoding="utf-8"))
         satellites = payload.get("satellites", [])

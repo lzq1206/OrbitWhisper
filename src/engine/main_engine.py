@@ -123,7 +123,7 @@ def _build_satellite_payload(dataset, pricing_results):
 def run_engine(output_path: Path | None = None) -> Path:
     """执行全流程并输出 JSON 报告。"""
 
-    final_path = output_path or (Path.cwd() / "public" / "data" / "daily_report.json")
+    final_path = output_path or (Path.cwd() / "data" / "daily_report.json")
     latest_tles_path = final_path.parent / "latest_tles.json"
 
     dataset = build_daily_dataset(count=300, real_tles_path=latest_tles_path)

@@ -17,11 +17,11 @@
    - 精算与生存分析：`src/engine/actuarial_model.py`（调用 `src/models/cox_survival.py`）
    - 产物生成：`src/engine/json_generator.py`
 3. **静态托管（GitHub Pages）**
-   - 输出到 `public/data/daily_report.json` 和 `public/data/daily_report.md`
-   - 使用 `peaceiris/actions-gh-pages` 部署 `public/` 到 `gh-pages`
+   - 输出到 `data/daily_report.json` 和 `data/daily_report.md`
+   - 使用 `peaceiris/actions-gh-pages` 部署仓库根目录到 `gh-pages`
 4. **3D 可视化前端**
-   - 页面入口：`public/index.html`
-   - 渲染逻辑：`public/app.js`
+   - 页面入口：`index.html`
+   - 渲染逻辑：`app.js`
    - CesiumJS 负责地球/空间实体展示，ECharts 显示生存曲线
 
 ---
@@ -56,11 +56,10 @@
 OrbitWhisper/
 ├── .github/workflows/
 │   └── daily_compute.yml
-├── public/
-│   ├── index.html
-│   ├── app.js
-│   └── data/
-│       └── daily_report.json         # 由工作流每天生成
+├── index.html
+├── app.js
+├── data/
+│   └── daily_report.json             # 由工作流每天生成
 ├── src/
 │   ├── engine/
 │   │   ├── data_pipeline.py
@@ -90,7 +89,7 @@ python -m src.engine.json_generator
 3. 启动静态页面（本地预览）
 ```bash
 python -m http.server 8000
-# 打开 http://localhost:8000/public/
+# 打开 http://localhost:8000/
 ```
 
 4. 运行测试
@@ -110,7 +109,7 @@ python -m unittest discover tests
 - 步骤：
   1. **collect-real-tles**：从 Space-Track 拉取真实 TLE（未配置密钥时自动回退）
   2. **compute-and-deploy**：运行 `src.engine` 计算并生成 JSON/Markdown
-  3. 发布 `public/` 到 `gh-pages`（网页随仓库改动自动更新）
+  3. 发布仓库根目录到 `gh-pages`（网页随仓库改动自动更新）
 
 ---
 
