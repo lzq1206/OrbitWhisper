@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import joblib
+import numpy as np
 import pandas as pd
 from sklearn.multioutput import MultiOutputRegressor
 from xgboost import XGBRegressor
@@ -59,7 +60,7 @@ class ResidualPredictor:
     def train_model(self, X_train: pd.DataFrame, y_train: pd.DataFrame) -> None:
         self.model.fit(X_train, y_train)
 
-    def predict(self, X_test: pd.DataFrame):
+    def predict(self, X_test: pd.DataFrame) -> np.ndarray:
         return self.model.predict(X_test)
 
     def save_model(self, path: str) -> None:
