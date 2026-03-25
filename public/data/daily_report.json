@@ -1,0 +1,172 @@
+{
+  "project": "AstroQuant 3D",
+  "generated_at": "2026-03-25T12:15:44+00:00",
+  "data_sources": {
+    "tle": "Space-Track/Celestrak placeholder feed",
+    "space_weather": "NOAA placeholder feed",
+    "maritime": "Maritime warning placeholder feed"
+  },
+  "high_risk_events": [
+    {
+      "asset_id": "AQ-1001",
+      "counterpart_id": "AQ-1002",
+      "tca_utc": "2026-03-25T18:15:44+00:00",
+      "miss_distance_km": 4.2,
+      "poc": 0.00027
+    }
+  ],
+  "collision_events": [
+    {
+      "asset_id": "AQ-1001",
+      "counterpart_id": "AQ-1002",
+      "tca_utc": "2026-03-25T18:15:44+00:00",
+      "miss_distance_km": 4.2,
+      "poc": 0.00027
+    },
+    {
+      "asset_id": "AQ-1002",
+      "counterpart_id": "AQ-1001",
+      "tca_utc": "2026-03-25T21:15:44+00:00",
+      "miss_distance_km": 9.8,
+      "poc": 3.5e-05
+    }
+  ],
+  "asset_pricing": [
+    {
+      "asset_id": "AQ-1001",
+      "pof_12m": 0.9349921178713606,
+      "expected_loss": 61709479.779509805,
+      "pure_premium": 72817186.13982156,
+      "survival_curve": [
+        {
+          "timeline_days": 0.0,
+          "survival_prob": 0.981210143290746
+        },
+        {
+          "timeline_days": 30.0,
+          "survival_prob": 0.981210143290746
+        },
+        {
+          "timeline_days": 60.0,
+          "survival_prob": 0.981210143290746
+        },
+        {
+          "timeline_days": 91.0,
+          "survival_prob": 0.9781597489592778
+        },
+        {
+          "timeline_days": 121.0,
+          "survival_prob": 0.891541581070673
+        },
+        {
+          "timeline_days": 152.0,
+          "survival_prob": 0.8269759129173064
+        },
+        {
+          "timeline_days": 182.0,
+          "survival_prob": 0.7726871197286974
+        },
+        {
+          "timeline_days": 212.0,
+          "survival_prob": 0.7726871197286974
+        },
+        {
+          "timeline_days": 243.0,
+          "survival_prob": 0.7726871197286974
+        },
+        {
+          "timeline_days": 273.0,
+          "survival_prob": 0.7726871197286974
+        },
+        {
+          "timeline_days": 304.0,
+          "survival_prob": 0.5554760247324017
+        },
+        {
+          "timeline_days": 334.0,
+          "survival_prob": 0.06500788212863935
+        },
+        {
+          "timeline_days": 365.0,
+          "survival_prob": 0.06500788212863935
+        }
+      ],
+      "panel_effects_note": "Fixed effects handled via one-hot dummies for manufacturer and bus_type."
+    },
+    {
+      "asset_id": "AQ-1002",
+      "pof_12m": 0.9790875807954037,
+      "expected_loss": 64619780.33249665,
+      "pure_premium": 76251340.79234605,
+      "survival_curve": [
+        {
+          "timeline_days": 0.0,
+          "survival_prob": 0.9735172902352479
+        },
+        {
+          "timeline_days": 30.0,
+          "survival_prob": 0.9735172902352479
+        },
+        {
+          "timeline_days": 60.0,
+          "survival_prob": 0.9735172902352479
+        },
+        {
+          "timeline_days": 91.0,
+          "survival_prob": 0.9692377328730977
+        },
+        {
+          "timeline_days": 121.0,
+          "survival_prob": 0.8500662580745124
+        },
+        {
+          "timeline_days": 152.0,
+          "survival_prob": 0.7642868443488513
+        },
+        {
+          "timeline_days": 182.0,
+          "survival_prob": 0.6942735324419017
+        },
+        {
+          "timeline_days": 212.0,
+          "survival_prob": 0.6942735324419017
+        },
+        {
+          "timeline_days": 243.0,
+          "survival_prob": 0.6942735324419017
+        },
+        {
+          "timeline_days": 273.0,
+          "survival_prob": 0.6942735324419017
+        },
+        {
+          "timeline_days": 304.0,
+          "survival_prob": 0.4352249305990109
+        },
+        {
+          "timeline_days": 334.0,
+          "survival_prob": 0.020912419204596255
+        },
+        {
+          "timeline_days": 365.0,
+          "survival_prob": 0.020912419204596255
+        }
+      ],
+      "panel_effects_note": "Fixed effects handled via one-hot dummies for manufacturer and bus_type."
+    }
+  ],
+  "orbits": [
+    {
+      "asset_id": "AQ-1001",
+      "name": "ORBITWHISPER-DEMO-1",
+      "line1": "1 25544U 98067A   24001.10000000  .00014266  00000+0  26094-3 0  9994",
+      "line2": "2 25544  51.6416  13.3500 0005001 130.5360 289.5733 15.49938556439616"
+    },
+    {
+      "asset_id": "AQ-1002",
+      "name": "ORBITWHISPER-DEMO-2",
+      "line1": "1 40967U 15058A   24001.30000000  .00000054  00000+0  00000+0 0  9996",
+      "line2": "2 40967   0.0172  88.2052 0002089 205.2228 262.0058  1.00270765 30287"
+    }
+  ]
+}
