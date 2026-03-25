@@ -87,3 +87,4 @@ OrbitWhisper/
 - 在 `src/data/` 增加 NOAA SWPC 与 CDM ETL 任务
 - 在 `src/assessment/` 增加更高保真的碰撞概率积分模型
 - 在 `src/main.py` 中接入定时调度器（如 APScheduler）实现自动化流水线
+> 兼容性说明：`poliastro` 在较新 Python 版本（如 3.11+）上可能存在上游依赖构建限制；当前已在依赖中按 Python 版本进行条件安装，核心 SGP4 流程不受影响。
