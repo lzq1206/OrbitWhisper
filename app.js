@@ -11,8 +11,18 @@
     return;
   }
   window.__orbitwhisperReport = report;
-  const summary = document.getElementById("summary");
-  summary.innerHTML = `
+  const hud = document.getElementById("hud");
+  const hudData = report.hud_data || {};
+  hud.innerHTML = `
+    <h1>AstroQuant 风险评估终端</h1>
+    <p>资产状态: <span style="color: ${Number(hudData.high_risk_count || 0) > 0 ? "#ff0044" : "#00ff00"};">${hudData.status || "风险监控中"}</span></p>
+    <p>高危交会预警: ${Number(hudData.high_risk_count || 0)} 起</p>
+    <p>全盘动态保费: ${hudData.total_premium_var || "+0.0%"}</p>
+    <p style="font-size: 0.7rem; color: #666;">最后更新: ${hudData.update_time || report.generated_at || "-"}</p>
+    <div id="summary"><div class="metric">正在加载数据...</div></div>
+  `;
+  const renderedSummary = document.getElementById("summary");
+  renderedSummary.innerHTML = `
     <div class="metric">生成时间: ${report.generated_at}</div>
     <div class="metric">资产数量: ${report.asset_pricing.length}</div>
     <div class="metric warn">高危交会事件: ${report.high_risk_events.length}</div>
@@ -39,12 +49,21 @@
     viewer.scene.globe.enableLighting = true;
 
     const entityMap = {};
+    const satelliteStyles = Object.fromEntries(
+      (report.satellites || []).map((s) => [s.id, { radius: Number(s.radius || 0.5), color: String(s.color || "#00ffcc") }]),
+    );
     report.orbits.forEach((orbit) => {
+      const satStyle = satelliteStyles[orbit.asset_id] || { radius: 0.5, color: "#00ffcc" };
+      const radius = Math.max(satStyle.radius, 0.1) * 4000;
       const entity = viewer.entities.add({
         id: orbit.asset_id,
         name: orbit.name,
         position: Cesium.Cartesian3.fromDegrees(orbit.lng, orbit.lat, safeAltitudeMeters(orbit.alt)),
         point: { pixelSize: 9, color: Cesium.Color.CYAN },
+        ellipsoid: {
+          radii: new Cesium.Cartesian3(radius, radius, radius),
+          material: satStyle.color.toLowerCase() === "#ff0044" ? Cesium.Color.RED.withAlpha(0.75) : Cesium.Color.CYAN.withAlpha(0.6),
+        },
         label: {
           text: orbit.asset_id,
           font: "12px sans-serif",

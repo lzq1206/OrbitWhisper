@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import Mock
 
 from src.data.tle_fetcher import SpaceTrackClient
 
@@ -22,6 +23,28 @@ class TestSpaceTrackClientParser(unittest.TestCase):
         parsed = SpaceTrackClient._parse_tle_text(raw)
         self.assertTrue(parsed["line1"].startswith("1 "))
         self.assertTrue(parsed["line2"].startswith("2 "))
+
+    def test_get_latest_tle_by_ids_parses_json_payload(self):
+        client = SpaceTrackClient.__new__(SpaceTrackClient)
+        client.timeout = 5
+        client._login = Mock()
+        client.session = Mock()
+        response = Mock()
+        response.json.return_value = [
+            {
+                "NORAD_CAT_ID": "25544",
+                "TLE_LINE1": "1 25544U 98067A   24068.52754500  .00020000  00000-0  29677-4 0  9994",
+                "TLE_LINE2": "2 25544  51.6418  72.8432 0004908  56.6248  85.7564 15.50000000444823",
+            }
+        ]
+        response.raise_for_status.return_value = None
+        client.session.get.return_value = response
+
+        rows = client.get_latest_tle_by_ids([25544])
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["norad_id"], 25544)
+        self.assertTrue(rows[0]["line1"].startswith("1 "))
+        self.assertTrue(rows[0]["line2"].startswith("2 "))
 
 
 if __name__ == "__main__":

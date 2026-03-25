@@ -38,9 +38,10 @@ class TestEngineJsonGenerator(unittest.TestCase):
             )
 
             hud = payload["hud_data"]
-            self.assertEqual(hud["status"], "风险监控中")
+            self.assertIn(hud["status"], {"空间天气平稳", "地磁暴警报：所有低轨资产阻力飙升"})
             self.assertIn("high_risk_count", hud)
             self.assertIn("total_premium_var", hud)
+            self.assertIn("update_time", hud)
 
             satellites = payload["satellites"]
             self.assertEqual(len(satellites), SATELLITE_COUNT)

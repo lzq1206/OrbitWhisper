@@ -76,7 +76,7 @@ def _build_satellite_payload(dataset, pricing_results):
                 "lat": round(lat, 6),
                 "lng": round(lng, 6),
                 "alt": round(alt, 6),
-                "radius": 0.5,
+                "radius": 0.8 if is_high_risk else 0.5,
                 "color": "#ff0044" if is_high_risk else "#00ffcc",
                 "pof": round(pof, 6),
                 "suggested_premium": round(premium, 2),
@@ -133,9 +133,10 @@ def run_engine(output_path: Path | None = None) -> Path:
     report = {
         "generated_at": dataset.generated_at,
         "hud_data": {
-            "status": "风险监控中",
+            "status": "地磁暴警报：所有低轨资产阻力飙升" if dataset.weather["is_geomagnetic_storm"] >= 1 else "空间天气平稳",
             "high_risk_count": high_risk_count,
             "total_premium_var": _premium_var([s["suggested_premium"] for s in satellites]),
+            "update_time": dataset.generated_at,
         },
         "satellites": satellites,
         "orbits": orbits,

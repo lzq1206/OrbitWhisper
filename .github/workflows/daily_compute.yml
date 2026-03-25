@@ -20,7 +20,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
+          python-version: "3.12"
 
       - name: Install dependencies
         run: |
@@ -50,13 +50,10 @@ jobs:
 
           ids = [25544, 40967, 33591, 43013, 44713]
           client = SpaceTrackClient()
-          tles = []
-          for norad in ids:
-              try:
-                  rec = client.get_latest_tle(norad)
-                  tles.append({"norad_id": norad, "line1": rec["line1"], "line2": rec["line2"]})
-              except Exception:
-                  continue
+          try:
+              tles = client.get_latest_tle_by_ids(ids)
+          except Exception:
+              tles = []
           output_path.write_text(
               json.dumps({"source": "space-track", "count": len(tles), "tles": tles}, ensure_ascii=False, indent=2),
               encoding="utf-8",
@@ -81,7 +78,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
+          python-version: "3.12"
 
       - name: Install dependencies
         run: |
