@@ -34,6 +34,7 @@ class SatelliteRecord:
     name: str
     norad_id: int
     category: str
+    status: str
     line1: str
     line2: str
     lat: float
@@ -74,6 +75,7 @@ def _load_real_satellites(path: Path) -> list[SatelliteRecord]:
         norad_id = item.get("norad_id", 0)
         name = item.get("name", f"SAT-{norad_id}")
         category = item.get("category", "其他")
+        status = item.get("status", "active")
         line1 = str(item.get("line1", "")).strip()
         line2 = str(item.get("line2", "")).strip()
         lat = float(item.get("lat", 0))
@@ -89,6 +91,7 @@ def _load_real_satellites(path: Path) -> list[SatelliteRecord]:
             name=name,
             norad_id=norad_id,
             category=category,
+            status=status,
             line1=line1,
             line2=line2,
             lat=lat,
@@ -201,6 +204,7 @@ def build_daily_dataset(
                 "name": sat.name,
                 "norad_id": sat.norad_id,
                 "category": sat.category,
+                "status": sat.status,
                 "line1": sat.line1,
                 "line2": sat.line2,
                 "lat": sat.lat,

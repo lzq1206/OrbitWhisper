@@ -16,7 +16,7 @@ import json
 import math
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -176,7 +176,7 @@ def fetch_group_tle(session: requests.Session, group: str, timeout: int = 30) ->
     return results
 
 
-def process_tle_satellite(tle_record: dict[str, str], category: str, now: datetime) -> dict[str, Any] | None:
+def process_tle_satellite(tle_record: dict[str, str], category: str, now: datetime, is_decayed: bool = False) -> dict[str, Any] | None:
     """Process a single satellite TLE record into our output format."""
     name = tle_record.get("name", "UNKNOWN").strip()
     line1 = tle_record.get("line1", "").strip()
@@ -185,7 +185,6 @@ def process_tle_satellite(tle_record: dict[str, str], category: str, now: dateti
     if not line1.startswith("1 ") or not line2.startswith("2 "):
         return None
 
-    # Extract NORAD ID from line1 columns 3-7
     try:
         norad_id = int(line1[2:7].strip())
     except (ValueError, IndexError):
@@ -194,15 +193,30 @@ def process_tle_satellite(tle_record: dict[str, str], category: str, now: dateti
     if norad_id <= 0:
         return None
 
-    # Use sgp4 to parse and propagate
     try:
         satrec = Satrec.twoline2rv(line1, line2, WGS72)
     except Exception:
         return None
 
-    pos = _sgp4_position_from_satrec(satrec, now)
-    if pos is None:
-        return None
+    status = "active"
+    pos = None if is_decayed else _sgp4_position_from_satrec(satrec, now)
+    
+    # Fallback for decayed satellites (error computing current pos, or alt <= 0, or explicitly decayed)
+    if is_decayed or pos is None or pos[2] <= 0:
+        year = satrec.epochyr + 2000 if satrec.epochyr < 57 else satrec.epochyr + 1900
+        epoch_dt = datetime(year, 1, 1, tzinfo=timezone.utc) + timedelta(days=satrec.epochdays - 1)
+        pos_epoch = _sgp4_position_from_satrec(satrec, epoch_dt)
+        status = "decayed"
+        if pos_epoch is not None:
+            lat, lng, _ = pos_epoch
+            pos = (lat, lng, 0.0)
+        else:
+            lat = math.degrees(math.asin(math.sin(satrec.incco) * math.sin(satrec.mo + satrec.argpo)))
+            lng = math.degrees(satrec.nodeo)
+            lng = ((lng + 180) % 360) - 180
+            pos = (round(lat, 6), round(lng, 6), 0.0)
+    elif pos[2] < 240.0:
+        status = "reentering"
 
     lat, lng, alt = pos
 
@@ -210,6 +224,7 @@ def process_tle_satellite(tle_record: dict[str, str], category: str, now: dateti
         "norad_id": norad_id,
         "name": name if name else f"SAT-{norad_id}",
         "category": category,
+        "status": status,
         "lat": lat,
         "lng": lng,
         "alt": round(alt, 3),
@@ -244,6 +259,20 @@ def fetch_all_satellites(include_large: bool = False) -> dict[str, Any]:
     total_groups = sum(len(gs) for gs in groups_to_fetch.values())
     fetched = 0
 
+    # Pre-fetch last-30-days explicitly to know exactly what's decayed
+    print("[0] Pre-fetching known decayed list...", end=" ")
+    sys.stdout.flush()
+    decayed_ids = set()
+    decayed_records = fetch_group_tle(session, "last-30-days")
+    for r in decayed_records:
+        line1 = r.get("line1", "")
+        if len(line1) > 7:
+            try:
+                decayed_ids.add(int(line1[2:7].strip()))
+            except ValueError:
+                pass
+    print(f"found {len(decayed_ids)}")
+
     for category, groups in groups_to_fetch.items():
         cat_count = 0
         for group in groups:
@@ -255,7 +284,14 @@ def fetch_all_satellites(include_large: bool = False) -> dict[str, Any]:
             new_count = 0
 
             for tle_record in records:
-                sat = process_tle_satellite(tle_record, category, now)
+                nid_str = tle_record.get("line1", "")[2:7] if len(tle_record.get("line1", "")) > 7 else "0"
+                try:
+                    nid = int(nid_str.strip())
+                except ValueError:
+                    continue
+                is_decayed = nid in decayed_ids
+                
+                sat = process_tle_satellite(tle_record, category, now, is_decayed)
                 if sat is None:
                     continue
                 nid = sat["norad_id"]

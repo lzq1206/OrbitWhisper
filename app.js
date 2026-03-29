@@ -238,14 +238,33 @@ function addSatelliteEntity(orbit) {
     const shouldShow = visibleCategories.has(cat);
     const displayName = orbit.name || orbit.asset_id;
 
+    let positionProp;
+    let colorProp = cesiumColor;
+    let pixelSize = 4;
+    
+    if (orbit.status === "decayed") {
+      positionProp = Cesium.Cartesian3.fromDegrees(Number(orbit.lng || 0), Number(orbit.lat || 0), 0);
+      colorProp = Cesium.Color.RED;
+      pixelSize = 6;
+    } else {
+      positionProp = new Cesium.CallbackProperty((time, result) => calcPosition(orbitStateMap[key], time, result), false);
+      if (orbit.status === "reentering") {
+        pixelSize = 6;
+        colorProp = new Cesium.CallbackProperty((time) => {
+          const ms = Cesium.JulianDate.toDate(time).getTime();
+          return (ms % 600 < 300) ? Cesium.Color.RED : Cesium.Color.RED.withAlpha(0.2);
+        }, false);
+      }
+    }
+
     const entity = viewer.entities.add({
       id: orbit.asset_id,
       name: displayName,
       show: shouldShow,
-      position: new Cesium.CallbackProperty((time, result) => calcPosition(orbitStateMap[key], time, result), false),
+      position: positionProp,
       point: {
-        pixelSize: 4,
-        color: cesiumColor,
+        pixelSize: pixelSize,
+        color: colorProp,
         outlineWidth: 0,
         scaleByDistance: new Cesium.NearFarScalar(5e5, 2.0, 2e7, 0.5),
       },
@@ -283,6 +302,19 @@ function showDetailPanel(orbit) {
   const cat = orbit.category || "其他";
   const color = CATEGORY_COLORS[cat] || "#aaa";
 
+  let insuranceHtml = "";
+  if (orbit.orbit_risk !== undefined && orbit.orbit_risk !== null) {
+      insuranceHtml = `
+        <div class="separator" style="height:1px; background:#334; margin:10px 0;"></div>
+        <div class="detail-subtitle" style="color:#0f8; margin-bottom: 8px;">动态定价精算模型</div>
+        <div class="detail-row"><span class="label">轨道风险</span><span class="value">${Number(orbit.orbit_risk).toExponential(2)}</span></div>
+        <div class="detail-row"><span class="label">规避后碰撞率</span><span class="value">${Number(orbit.pc_after).toExponential(2)}</span></div>
+        <div class="detail-row"><span class="label">动态赔付强度</span><span class="value">${Number(orbit.claim_int).toFixed(4)}</span></div>
+        <div class="detail-row"><span class="label">商业费率</span><span class="value warn-text">${Number(orbit.premium_rate).toFixed(2)} %</span></div>
+        <div class="detail-row"><span class="label">当期准备金</span><span class="value">$${Math.round(orbit.reserve).toLocaleString()}</span></div>
+      `;
+  }
+
   body.innerHTML = `
     <div class="detail-row"><span class="label">NORAD ID</span><span class="value">${orbit.norad_id || orbit.asset_id}</span></div>
     <div class="detail-row"><span class="label">名称</span><span class="value">${name}</span></div>
@@ -290,6 +322,7 @@ function showDetailPanel(orbit) {
     <div class="detail-row"><span class="label">纬度</span><span class="value">${Number(orbit.lat).toFixed(4)}°</span></div>
     <div class="detail-row"><span class="label">经度</span><span class="value">${Number(orbit.lng).toFixed(4)}°</span></div>
     <div class="detail-row"><span class="label">高度</span><span class="value">${Number(orbit.alt).toFixed(1)} km</span></div>
+    ${insuranceHtml}
   `;
 
   panel.classList.remove("hidden");
