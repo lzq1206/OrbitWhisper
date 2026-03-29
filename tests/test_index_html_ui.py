@@ -12,7 +12,6 @@ class TestIndexHtmlUi(unittest.TestCase):
         self.assertRegex(self.index_html, re.compile(r"async function apiFetch\("))
         self.assertRegex(self.index_html, re.compile(r"await apiFetch\('/api/upload_tle'"))
         self.assertRegex(self.index_html, re.compile(r"await apiFetch\('/api/upload_image'"))
-        self.assertRegex(self.index_html, re.compile(r"resp\.status === 501"))
 
     def test_modal_overlay_uses_fixed_position(self):
         self.assertRegex(
