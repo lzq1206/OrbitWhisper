@@ -128,8 +128,8 @@ def _build_satellite_payload_real(dataset):
         if not is_prc:
             name_up = str(sat.name).upper()
             grp_up = str(sat.group).upper()
-            prc_patterns = ["YAOGAN", "BEIDOU", "GAOFEN", "TIANGONG", "SHENZHOU", "CZ-", "SJ-", "HAIYANG", "FY-", "QUANZHOU"]
-            if any(p in name_up for p in prc_patterns) or "QIANFAN" in grp_up:
+            prc_patterns = ["YAOGAN", "BEIDOU", "GAOFEN", "TIANGONG", "SHENZHOU", "CZ-", "SJ-", "HAIYANG", "FY-", "QUANZHOU", "TIANMU", "TIANPING", "SHIYAN", "XJS", "CHINASAT", "APSTAR"]
+            if any(p in name_up for p in prc_patterns) or "QIANFAN" in grp_up or "CHINESE" in grp_up:
                 is_prc = True
 
         orbits.append({
@@ -425,7 +425,7 @@ def run_engine(output_path: Path | None = None) -> Path:
         "satellites": satellites,
         "orbits": orbits,
         "high_risk_events": high_risk_events,
-        "asset_pricing": asset_pricing[:100],  # Limit pricing output for large datasets
+        "asset_pricing": asset_pricing,  # Removed 100 limit; provide full coverage for identified assets
     }
 
     final_path.parent.mkdir(parents=True, exist_ok=True)
