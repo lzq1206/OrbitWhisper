@@ -2,21 +2,19 @@
 
 // ── Category → color mapping ──
 const CATEGORY_COLORS = {
-  "空间站与特殊兴趣": "#ff6600",
-  "气象与地球资源":   "#00ccff",
-  "通信卫星":         "#ffcc00",
-  "导航卫星":         "#00ff88",
-  "科学卫星":         "#cc44ff",
-  "其他":             "#888888",
-  "大型星座":         "#4488ff",
+  "空间站与特殊兴趣": "#ff4757", // warning red for special
+  "气象与地球资源": "#2ed573", // green
+  "通信卫星": "#1e90ff",     // blue
+  "导航卫星": "#ffa502",     // orange
+  "科学卫星": "#9b59b6",     // purple
+  "大型星座": "#eccc68",     // yellow
+  "其他": "#747d8c",
 };
 
-// Default-on categories (shown on first load)
-const DEFAULT_VISIBLE = new Set([
-  "空间站与特殊兴趣",
-  "导航卫星",
-  "科学卫星",
-]);
+// Default visible categories on load
+const DEFAULT_VISIBLE = new Set(["空间站与特殊兴趣", "导航卫星", "科学卫星"]);
+const visibleCategories = new Set();
+const visibleGroups = new Set();
 
 // ── Orbit animation constants ──
 const MIN_ORBIT_PERIOD_SEC = 4800;
@@ -26,7 +24,6 @@ const GOLDEN_ANGLE_DEG = 137.5;
 
 // ── State ──
 let allOrbits = [];               // full satellite database from report
-let visibleCategories = new Set(); // currently visible categories
 let entityMap = {};
 let orbitStateMap = {};
 let orbitMap = {};
@@ -158,19 +155,55 @@ async function saveCustomName() {
   pendingTempId = '';
 }
 
-// ── Category filter UI ──
-function buildCategoryFilters(catStats) {
+// ── Category & Group filter UI ──
+function buildCategoryFilters() {
   const container = document.getElementById("categoryFilters");
   container.innerHTML = "";
 
-  const categories = Object.entries(catStats).sort((a, b) => b[1] - a[1]);
+  // Dynamically build tree from allOrbits
+  const catTree = {};
+  allOrbits.forEach(o => {
+    const cat = o.category || "其他";
+    const grp = o.group || "其它/末知";
+    if (!catTree[cat]) catTree[cat] = { count: 0, groups: {} };
+    catTree[cat].count++;
+    if (!catTree[cat].groups[grp]) catTree[cat].groups[grp] = 0;
+    catTree[cat].groups[grp]++;
+  });
 
-  categories.forEach(([cat, count]) => {
+  const categories = Object.keys(catTree).sort((a, b) => catTree[b].count - catTree[a].count);
+
+  categories.forEach(cat => {
+    const data = catTree[cat];
     const color = CATEGORY_COLORS[cat] || "#aaa";
     const isDefault = DEFAULT_VISIBLE.has(cat);
 
+    const wrap = document.createElement("div");
+    wrap.className = "category-wrap";
+    
+    // Parent item
     const item = document.createElement("label");
     item.className = "category-item";
+    
+    const expandBtn = document.createElement("span");
+    expandBtn.style.cursor = "pointer";
+    expandBtn.style.marginRight = "4px";
+    expandBtn.textContent = "▶";
+    expandBtn.style.color = "#8cf";
+    expandBtn.style.userSelect = "none";
+    
+    // Child container
+    const childWrap = document.createElement("div");
+    childWrap.className = "subcategory-wrap";
+    childWrap.style.display = "none";
+    childWrap.style.paddingLeft = "24px";
+    
+    expandBtn.onclick = (e) => {
+        e.preventDefault();
+        const isHidden = childWrap.style.display === "none";
+        childWrap.style.display = isHidden ? "block" : "none";
+        expandBtn.textContent = isHidden ? "▼" : "▶";
+    };
 
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
@@ -180,12 +213,6 @@ function buildCategoryFilters(catStats) {
     checkbox.style.borderColor = isDefault ? color : "";
     checkbox.dataset.category = cat;
     checkbox.dataset.color = color;
-
-    checkbox.addEventListener("change", () => {
-      checkbox.style.backgroundColor = checkbox.checked ? color : "transparent";
-      checkbox.style.borderColor = checkbox.checked ? color : "";
-      toggleCategory(cat, checkbox.checked);
-    });
 
     if (isDefault) visibleCategories.add(cat);
 
@@ -199,20 +226,77 @@ function buildCategoryFilters(catStats) {
 
     const countSpan = document.createElement("span");
     countSpan.className = "category-count";
-    countSpan.textContent = count.toLocaleString();
+    countSpan.textContent = data.count.toLocaleString();
 
-    item.append(checkbox, dot, label, countSpan);
-    container.appendChild(item);
+    item.append(expandBtn, checkbox, dot, label, countSpan);
+    wrap.appendChild(item);
+    
+    // Build groups
+    const grps = Object.keys(data.groups).sort((a,b)=>data.groups[b] - data.groups[a]);
+    const childCheckboxes = [];
+    
+    grps.forEach(grp => {
+        const c_item = document.createElement("label");
+        c_item.className = "category-item subcategory-item";
+        c_item.style.fontSize = "0.9em";
+        c_item.style.padding = "2px 0";
+        
+        const c_checkbox = document.createElement("input");
+        c_checkbox.type = "checkbox";
+        c_checkbox.className = "group-checkbox";
+        c_checkbox.checked = isDefault;
+        c_checkbox.style.backgroundColor = isDefault ? color : "transparent";
+        c_checkbox.style.borderColor = isDefault ? color : "";
+        c_checkbox.dataset.group = grp;
+        c_checkbox.dataset.category = cat;
+        c_checkbox.dataset.color = color;
+        
+        if (isDefault) visibleGroups.add(grp);
+        
+        const c_label = document.createElement("span");
+        c_label.className = "category-label";
+        c_label.textContent = grp;
+
+        const c_countSpan = document.createElement("span");
+        c_countSpan.className = "category-count";
+        c_countSpan.textContent = data.groups[grp].toLocaleString();
+        
+        c_checkbox.addEventListener("change", (e) => {
+            const checked = c_checkbox.checked;
+            c_checkbox.style.backgroundColor = checked ? color : "transparent";
+            c_checkbox.style.borderColor = checked ? color : "";
+            if (checked) visibleGroups.add(grp);
+            else visibleGroups.delete(grp);
+            applyFilters();
+        });
+        
+        childCheckboxes.push({ box: c_checkbox, grp: grp });
+        c_item.append(c_checkbox, c_label, c_countSpan);
+        childWrap.appendChild(c_item);
+    });
+    
+    checkbox.addEventListener("change", () => {
+      checkbox.style.backgroundColor = checkbox.checked ? color : "transparent";
+      checkbox.style.borderColor = checkbox.checked ? color : "";
+      
+      if (checkbox.checked) visibleCategories.add(cat);
+      else visibleCategories.delete(cat);
+      
+      // Cascade to children
+      childCheckboxes.forEach(c => {
+          c.box.checked = checkbox.checked;
+          c.box.style.backgroundColor = checkbox.checked ? color : "transparent";
+          c.box.style.borderColor = checkbox.checked ? color : "";
+          if (checkbox.checked) visibleGroups.add(c.grp);
+          else visibleGroups.delete(c.grp);
+      });
+      
+      applyFilters();
+    });
+
+    wrap.appendChild(childWrap);
+    container.appendChild(wrap);
   });
-}
-
-function toggleCategory(cat, show) {
-  if (show) {
-    visibleCategories.add(cat);
-  } else {
-    visibleCategories.delete(cat);
-  }
-  applyFilters();
 }
 
 function applyFilters() {
@@ -226,7 +310,9 @@ function applyFilters() {
     if (!entity) return;
 
     const cat = orbit.category || "其他";
-    let shouldShow = visibleCategories.has(cat);
+    const grp = orbit.group || "其它/末知";
+    
+    let shouldShow = visibleCategories.has(cat) && visibleGroups.has(grp);
     
     if (prcOnly && orbit.is_prc !== true) {
       shouldShow = false;
@@ -241,14 +327,21 @@ function applyFilters() {
 }
 
 function setAllCategories(checked) {
-  document.querySelectorAll(".category-checkbox").forEach(cb => {
+  document.querySelectorAll(".category-checkbox, .group-checkbox").forEach(cb => {
     cb.checked = checked;
     const color = cb.dataset.color;
     cb.style.backgroundColor = checked ? color : "transparent";
     cb.style.borderColor = checked ? color : "";
+    
     const cat = cb.dataset.category;
-    if (checked) visibleCategories.add(cat);
-    else visibleCategories.delete(cat);
+    const grp = cb.dataset.group;
+    if (checked) {
+        if(cat && !grp) visibleCategories.add(cat);
+        if(grp) visibleGroups.add(grp);
+    } else {
+        if(cat && !grp) visibleCategories.delete(cat);
+        if(grp) visibleGroups.delete(grp);
+    }
   });
   applyFilters();
 }
@@ -557,6 +650,7 @@ function searchSatellites(keyword) {
   }
   
   applyFilters();
+  buildCategoryFilters(); // Doesn't need catStats anymore since it computes from allOrbits
   buildLegend(catStats);
   console.timeEnd("addSatellites");
 

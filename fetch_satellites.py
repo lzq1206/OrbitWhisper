@@ -374,6 +374,15 @@ def main():
         print(f"  {cat}: {count}")
     print(f"\nOutput written to: {output_path}")
     print("=" * 60)
+    
+    # Auto-trigger JSON generator so the frontend receives the latest real-time orbital updates
+    print("\nTriggering local generation of frontend 3D rendering payload (daily_report.json)...")
+    import subprocess
+    try:
+        subprocess.run([sys.executable, "-m", "src.engine.json_generator"], check=True)
+        print("Successfully regenerated daily_report.json.")
+    except Exception as e:
+        print(f"Failed to auto-generate frontend JSON: {e}")
 
 
 if __name__ == "__main__":
