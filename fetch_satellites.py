@@ -233,13 +233,14 @@ def process_tle_satellite(tle_record: dict[str, str], category: str, now: dateti
     }
 
 
-def fetch_all_satellites(include_large: bool = False) -> dict[str, Any]:
+def fetch_all_satellites(include_large: bool = False, existing_file_path: str = None) -> dict[str, Any]:
     """Fetch all categorized satellite data from CelesTrak.
 
     Uses TLE/3LE format which is directly parseable by sgp4 without conversion.
 
     Args:
         include_large: If True, also fetch large constellations (Starlink, OneWeb, etc.)
+        existing_file_path: Path to existing JSON to merge new records into, avoiding deletion.
 
     Returns:
         Dictionary with metadata and satellite records.
@@ -251,6 +252,18 @@ def fetch_all_satellites(include_large: bool = False) -> dict[str, Any]:
     all_satellites: dict[int, dict[str, Any]] = {}  # keyed by norad_id for dedup
     category_counts: dict[str, int] = {}
     group_counts: dict[str, int] = {}
+
+    if existing_file_path:
+        try:
+            with open(existing_file_path, "r", encoding="utf-8") as f:
+                old_data = json.load(f)
+                for sat in old_data.get("satellites", []):
+                    nid = sat.get("norad_id")
+                    if nid:
+                        all_satellites[nid] = sat
+            print(f"Loaded {len(all_satellites)} existing satellites.")
+        except Exception as e:
+            print(f"Could not load existing file, starting fresh. ({e})")
 
     groups_to_fetch = dict(SATELLITE_GROUPS)
     if include_large:
@@ -296,9 +309,9 @@ def fetch_all_satellites(include_large: bool = False) -> dict[str, Any]:
                     continue
                 nid = sat["norad_id"]
                 if nid not in all_satellites:
-                    all_satellites[nid] = sat
                     new_count += 1
-                    cat_count += 1
+                all_satellites[nid] = sat
+                cat_count += 1
 
             group_counts[group] = len(records)
             print(f"got {len(records)} records, {new_count} new unique")
@@ -306,7 +319,11 @@ def fetch_all_satellites(include_large: bool = False) -> dict[str, Any]:
             # Be polite to CelesTrak servers
             time.sleep(0.5)
 
-        category_counts[category] = cat_count
+    # Re-tally exact category counts from the final dict to account for merged legacy data
+    category_counts = {}
+    for sat in all_satellites.values():
+        cat = sat.get("category", "其他")
+        category_counts[cat] = category_counts.get(cat, 0) + 1
 
     # Sort by NORAD ID
     satellite_list = sorted(all_satellites.values(), key=lambda s: s["norad_id"])
@@ -337,9 +354,12 @@ def main():
     print("OrbitWhisper: CelesTrak Satellite Data Fetcher")
     print("=" * 60)
 
-    result = fetch_all_satellites(include_large=args.include_large)
-
     output_path = Path(args.output)
+    result = fetch_all_satellites(
+        include_large=args.include_large, 
+        existing_file_path=str(output_path) if output_path.exists() else None
+    )
+
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(
         json.dumps(result, ensure_ascii=False, indent=2),
