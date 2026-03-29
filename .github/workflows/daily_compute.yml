@@ -36,6 +36,7 @@ jobs:
         run: |
           python - <<'PY'
           import os
+          import sys
           import json
           from pathlib import Path
 
@@ -50,19 +51,18 @@ jobs:
           if not (username and password):
               output_path.write_text(json.dumps({"source": "fallback", "tles": []}, ensure_ascii=False, indent=2), encoding="utf-8")
               print("WARNING: Space-Track credentials not configured, using fallback dataset without real TLEs.")
-              import sys
               sys.exit(0)
 
-          os.environ["SPACETRACK_USER"] = username
-          os.environ["SPACETRACK_PWD"] = password
           ids = [25544, 40967, 33591, 43013, 44713]
-          client = SpaceTrackClient()
+          client = SpaceTrackClient(username=username, password=password)
           try:
               tles = client.get_public_file_tles_by_ids(ids)
-          except Exception:
+          except Exception as exc:
+              print(f"WARNING: public files query failed: {exc}", file=sys.stderr)
               try:
                   tles = client.get_latest_tle_by_ids(ids)
-              except Exception:
+              except Exception as inner_exc:
+                  print(f"WARNING: basicspacedata fallback query failed: {inner_exc}", file=sys.stderr)
                   tles = []
           output_path.write_text(
               json.dumps({"source": "space-track", "count": len(tles), "tles": tles}, ensure_ascii=False, indent=2),

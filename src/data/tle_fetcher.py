@@ -26,10 +26,15 @@ class SpaceTrackClient:
         "class/tle_latest/NORAD_CAT_ID/{norad_ids}/ORDINAL/1/FORMAT/tle"
     )
 
-    def __init__(self, timeout: int = 15) -> None:
+    def __init__(
+        self,
+        timeout: int = 15,
+        username: str | None = None,
+        password: str | None = None,
+    ) -> None:
         load_dotenv()
-        self.username = os.getenv("SPACETRACK_USER")
-        self.password = os.getenv("SPACETRACK_PWD")
+        self.username = username or os.getenv("SPACETRACK_USER")
+        self.password = password or os.getenv("SPACETRACK_PWD")
         self.timeout = timeout
         self.session = requests.Session()
         self._is_logged_in = False
@@ -146,9 +151,16 @@ class SpaceTrackClient:
                 continue
 
             norad_id = None
+            # Per standard TLE format, catalog number is in columns 3-7 (1-based).
             norad_raw = line1[2:7].strip()
-            if norad_raw.isdigit():
+            line1_has_catalog = norad_raw.isdigit()
+            line2_norad_raw = line2[2:7].strip()
+            line2_has_catalog = line2_norad_raw.isdigit()
+
+            if line1_has_catalog:
                 norad_id = int(norad_raw)
+            if line1_has_catalog and line2_has_catalog and norad_raw != line2_norad_raw:
+                continue
             rows.append({"norad_id": norad_id, "line1": line1, "line2": line2})
         return rows
 
