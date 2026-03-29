@@ -25,7 +25,7 @@
     #panelHeader { padding: 10px 12px; display: flex; justify-content: space-between; cursor: pointer; border-bottom: 1px solid rgba(88,160,255,0.2); }
     #panelBody { padding: 10px 12px; }
     #panelBody.collapsed { display: none; }
-    .dropZone { border: 1px dashed #3f78c3; border-radius: 6px; padding: 10px; margin-bottom: 10px; font-size: 13px; background: rgba(10, 24, 47, 0.5); }
+    .dropZone { border: 1px dashed #3f78c3; border-radius: 6px; padding: 10px; margin-bottom: 10px; font-size: 13px; background: rgba(10, 24, 47, 0.5); cursor: pointer; }
     .dropZone.dragover { border-color: #7ab0ff; background: rgba(15, 35, 67, 0.75); }
     #searchInput, #namingInput {
       width: 100%; box-sizing: border-box; background: #0a1627; color: #e8f1ff;
@@ -73,8 +73,10 @@
       <span id="panelToggle">收起</span>
     </div>
     <div id="panelBody">
-      <div id="tleDropZone" class="dropZone">上传轨道数据（拖拽 .tle/.txt 文件）</div>
-      <div id="imageDropZone" class="dropZone">上传观测图片（拖拽多张图片）</div>
+      <button id="tleUploadBtn" class="dropZone" type="button">上传轨道数据（点击选择 .tle/.txt 文件）</button>
+      <input id="tleFileInput" type="file" accept=".tle,.txt,text/plain" style="display:none;" />
+      <button id="imageUploadBtn" class="dropZone" type="button">上传观测图片（点击选择多张图片）</button>
+      <input id="imageFileInput" type="file" accept="image/*" multiple style="display:none;" />
       <input id="searchInput" type="text" placeholder="搜索卫星名称或编号..." list="satelliteHints" />
       <datalist id="satelliteHints"></datalist>
       <ul id="searchResults"></ul>
@@ -163,17 +165,14 @@
       controlPanel.style.top = `${hud.offsetTop + hud.offsetHeight + 12}px`;
     }
 
-    function bindDropZone(elementId, onFiles) {
-      const zone = document.getElementById(elementId);
-      ['dragenter', 'dragover'].forEach(evt => zone.addEventListener(evt, e => {
-        e.preventDefault();
-        zone.classList.add('dragover');
-      }));
-      ['dragleave', 'drop'].forEach(evt => zone.addEventListener(evt, e => {
-        e.preventDefault();
-        zone.classList.remove('dragover');
-      }));
-      zone.addEventListener('drop', e => onFiles(Array.from(e.dataTransfer.files || [])));
+    function bindClickUpload(buttonId, inputId, onFiles) {
+      const btn = document.getElementById(buttonId);
+      const input = document.getElementById(inputId);
+      btn.addEventListener('click', () => input.click());
+      input.addEventListener('change', () => {
+        onFiles(Array.from(input.files || []));
+        input.value = '';
+      });
     }
 
     async function uploadTleFiles(files) {
@@ -188,6 +187,12 @@
         if (!resp.ok) throw new Error('TLE 上传失败');
         const data = await resp.json();
         statusText.textContent = `已上传轨道: ${data.satellite.name}`;
+        if (window.__orbitwhisperAddUploadedOrbit && data.orbit) {
+          window.__orbitwhisperAddUploadedOrbit(data.orbit);
+        }
+        if (data.duplicate) {
+          statusText.textContent = `轨道已存在: ${data.satellite.name}`;
+        }
       } catch (err) {
         statusText.textContent = `轨道上传失败: ${err.message}`;
       }
@@ -278,8 +283,8 @@
       panelBody.classList.toggle('collapsed');
       panelToggle.textContent = panelBody.classList.contains('collapsed') ? '展开' : '收起';
     });
-    bindDropZone('tleDropZone', uploadTleFiles);
-    bindDropZone('imageDropZone', uploadImageFiles);
+    bindClickUpload('tleUploadBtn', 'tleFileInput', uploadTleFiles);
+    bindClickUpload('imageUploadBtn', 'imageFileInput', uploadImageFiles);
     searchInput.addEventListener('input', () => searchSatellite(searchInput.value.trim()));
     document.getElementById('saveNameBtn').addEventListener('click', saveCustomName);
     document.getElementById('cancelNameBtn').addEventListener('click', () => { namingModal.style.display = 'none'; pendingTempId = ''; });

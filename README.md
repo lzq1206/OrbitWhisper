@@ -124,7 +124,7 @@ python -m unittest discover tests
   - `schedule`: 每 6 小时一次（`00:00 / 06:00 / 12:00 / 18:00 UTC`）
   - `workflow_dispatch`: 手动触发
 - 步骤：
-  1. **collect-real-tles**：优先通过 Space-Track public files 接口拉取真实 TLE（未配置密钥时自动回退，且会兼容 `SPACETRACK_USER/SPACETRACK_PWD` 与 `SPACETRACK_IDENTITY/SPACETRACK_PASSWORD` 两套 Secrets 命名）
+  1. **collect-real-tles**：通过 CelesTrak NORAD 元素接口拉取真实 TLE（参考 Skyfield 官方文档的下载方式：`https://rhodesmill.org/skyfield/earth-satellites.html#downloading-satellite-elements`，以及 `https://celestrak.org/NORAD/elements/`）
   2. **compute-and-deploy**：运行 `src.engine` 计算并生成 JSON/Markdown
   3. 发布仓库根目录到 `gh-pages`（网页随仓库改动自动更新）
 
@@ -132,7 +132,7 @@ python -m unittest discover tests
 
 ## 6) 外部数据源接入建议（后续）
 
-- 物理/轨道层：Space-Track、Celestrak CDM
+- 物理/轨道层：CelesTrak、CelesTrak CDM
 - 环境层：NOAA F10.7/Kp
 - 资产层：ESA DISCOS / Seradata（或内部资产台账）
 

@@ -12,6 +12,11 @@ class TestIndexHtmlUi(unittest.TestCase):
         self.assertRegex(self.index_html, re.compile(r"async function apiFetch\("))
         self.assertRegex(self.index_html, re.compile(r"await apiFetch\('/api/upload_tle'"))
         self.assertRegex(self.index_html, re.compile(r"await apiFetch\('/api/upload_image'"))
+        self.assertRegex(self.index_html, re.compile(r"function bindClickUpload\("))
+        self.assertIn('id="tleUploadBtn"', self.index_html)
+        self.assertIn('id="imageUploadBtn"', self.index_html)
+        self.assertRegex(self.index_html, re.compile(r"bindClickUpload\('tleUploadBtn',\s*'tleFileInput'"))
+        self.assertRegex(self.index_html, re.compile(r"bindClickUpload\('imageUploadBtn',\s*'imageFileInput'"))
 
     def test_modal_overlay_uses_fixed_position(self):
         self.assertRegex(

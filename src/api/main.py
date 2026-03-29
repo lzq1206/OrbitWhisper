@@ -59,14 +59,34 @@ def _load_known_satellites() -> None:
 
 
 def _parse_tle_text(tle_text: str) -> tuple[str, str, str | None]:
-    lines = [line.strip() for line in tle_text.splitlines() if line.strip()]
+    lines = [line.strip().lstrip("\ufeff") for line in tle_text.splitlines() if line.strip()]
     if len(lines) < 2:
         raise ValueError("TLE text must contain at least two non-empty lines")
-    if lines[0].startswith("1 ") and lines[1].startswith("2 "):
-        return lines[0], lines[1], None
-    if len(lines) >= 3 and lines[1].startswith("1 ") and lines[2].startswith("2 "):
-        return lines[1], lines[2], lines[0]
+    for idx in range(len(lines) - 1):
+        line1 = lines[idx]
+        line2 = lines[idx + 1]
+        if line1.startswith("1 ") and line2.startswith("2 "):
+            inferred_name = None
+            if idx > 0 and not lines[idx - 1].startswith(("1 ", "2 ")):
+                inferred_name = lines[idx - 1]
+            return line1, line2, inferred_name
     raise ValueError("TLE format invalid: expected line1/line2 with prefixes '1 ' and '2 '")
+
+
+def _extract_norad_catalog_id(line1: str) -> int | None:
+    cat_id = line1[2:7].strip() if len(line1) >= 7 else ""
+    return int(cat_id) if cat_id.isdigit() else None
+
+
+def _build_preview_orbit(name: str, line1: str) -> dict[str, Any]:
+    cat_id = _extract_norad_catalog_id(line1)
+    # Keep deterministic pseudo-positions for uploaded TLE preview when no propagated track exists yet.
+    # 100_000 bounds the hash-derived seed to a stable small range while preserving visual spread.
+    seed = cat_id if cat_id is not None else abs(hash(name)) % 100_000
+    lat = ((seed % 140) - 70) * 0.8
+    lng = ((seed * 7) % 360) - 180
+    alt = 420 + (seed % 500)
+    return {"asset_id": name, "name": name, "lat": round(lat, 6), "lng": round(lng, 6), "alt": round(float(alt), 6)}
 
 
 def _parse_timestamps(raw: str | None, n: int) -> list[datetime]:
@@ -167,6 +187,29 @@ async def upload_image(
 @app.post("/api/upload_tle")
 def upload_tle(payload: TLEUploadRequest) -> dict[str, Any]:
     line1, line2, inferred_name = _parse_tle_text(payload.tle_text)
+    uploaded_cat_id = _extract_norad_catalog_id(line1)
+    for existing in UPLOADED_TLES:
+        existing_cat_id = _extract_norad_catalog_id(str(existing.get("line1", "")))
+        if existing.get("line1") == line1 and existing.get("line2") == line2:
+            existing_name = str(existing.get("name", ""))
+            return {
+                "message": "TLE already exists",
+                "duplicate": True,
+                "satellite": existing,
+                "orbit": _build_preview_orbit(existing_name, str(existing.get("line1", ""))),
+            }
+        if uploaded_cat_id is not None and existing_cat_id == uploaded_cat_id:
+            existing["line1"] = line1
+            existing["line2"] = line2
+            existing["created_at"] = datetime.now(timezone.utc).isoformat()
+            existing_name = str(existing.get("name", ""))
+            return {
+                "message": "TLE updated",
+                "duplicate": False,
+                "updated": True,
+                "satellite": existing,
+                "orbit": _build_preview_orbit(existing_name, line1),
+            }
     record = {
         "name": payload.name or inferred_name or f"TLE-{len(UPLOADED_TLES) + 1}",
         "line1": line1,
@@ -175,7 +218,7 @@ def upload_tle(payload: TLEUploadRequest) -> dict[str, Any]:
     }
     UPLOADED_TLES.append(record)
     KNOWN_SATELLITES.append({"id": record["name"], "name": record["name"], "source": "uploaded_tle"})
-    return {"message": "TLE uploaded", "satellite": record}
+    return {"message": "TLE uploaded", "duplicate": False, "satellite": record, "orbit": _build_preview_orbit(record["name"], line1)}
 
 
 @app.get("/api/satellites/search")
