@@ -43,7 +43,15 @@
   - `EL = PoF × EA × LGF`
   - `PurePremium = EL × (1 + loading)`
 
-### 2.3 面板数据固定效应处理
+### 2.3 动态轨道保险精算模型（新增 PRC 专区测算）
+- **引擎拓展**：在 `src/ext_insurance/` 目录下引入了来自学界前沿的动态在轨碰撞保险模型。
+  - **碎片激增效应 (`simulate_orbit_dynamics`)**：宏观演化 LEO 大环境下的撞击背景音 (`lam_orbit`)。
+  - **规避机动残余概率 (`aerodynamic_maneuver_effect`)**：基于卫星高度（导致不同的大气密度变化）推算其开展避碰后依然面临的风险截面。
+  - **极值巨灾损失 (`fit_gbma_threshold_model`)**：采用广义双项混合模型衡量超赔。
+  - **连续马尔可夫准备金 (`solve_thiele_reserve`)**：使用 Thiele 微分测算当期卫星要求的健康资产准备金。
+- **中国卫星精算赋能**：引擎在提取海量（3000+）现役卫星时，会自动校对 CelesTrak `satcat.csv` 目录下的所属国 (`OWNER`="PRC")。前端 UI 将为这部分重点资产动态渲染专有的金融级高亮“保险卡片”。
+
+### 2.4 面板数据固定效应处理
 - 在 `src/engine/actuarial_model.py` 中，`manufacturer` 和 `bus_type` 作为固定效应变量。
 - 在 `src/models/cox_survival.py` 中通过 one-hot 哑变量编码（`pd.get_dummies(..., drop_first=True)`）引入模型。
 - 这样可以在不改变 Cox 主体形式的情况下，控制不同平台/制造商的结构性差异。
