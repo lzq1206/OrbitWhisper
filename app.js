@@ -378,7 +378,8 @@ function addSatelliteEntity(orbit) {
     };
     nextOrbitPhaseIndex++;
 
-    const shouldShow = visibleCategories.has(cat);
+    const grp = orbit.group || "其它/末知";
+    const shouldShow = visibleCategories.has(cat) && visibleGroups.has(grp);
     const displayName = orbit.name || orbit.asset_id;
 
     let positionProp;
@@ -386,7 +387,8 @@ function addSatelliteEntity(orbit) {
     let pixelSize = 4;
     
     if (orbit.status === "decayed") {
-      positionProp = Cesium.Cartesian3.fromDegrees(Number(orbit.lng || 0), Number(orbit.lat || 0), 0);
+      // Place decayed sats slightly above surface so they're visible above terrain
+      positionProp = Cesium.Cartesian3.fromDegrees(Number(orbit.lng || 0), Number(orbit.lat || 0), 50000);
       colorProp = Cesium.Color.RED;
       pixelSize = 6;
     } else {

@@ -59,9 +59,12 @@ def _build_satellite_payload_real(dataset):
     base_lam = 1e-5
     sev_mean = 50000000.0
     prc_ids = set()
+    orbit_dyn_lam = None
+    epi_norm = None
     
     if INSURANCE_ENABLED:
         import requests
+        from src.ext_insurance.seiard_actuarial import simulate_seiard_nsfd
         try:
             print("Fetching PRC satellite list from CelesTrak (satcat)...")
             resp = requests.get("https://celestrak.org/pub/satcat.csv", timeout=30)
@@ -76,10 +79,24 @@ def _build_satellite_payload_real(dataset):
         except Exception as e:
             print(f"Failed to fetch PRC list: {e}")
             
-        orbit_dyn = simulate_orbit_dynamics({"T": 10, "dt": 1.0})
-        base_lam = orbit_dyn["lambda_collision"][0]
+        # Full time-series orbit dynamics (10yr, monthly steps = 120 steps)
+        n_steps = 120
+        dt_ins = 1.0 / 12.0
+        orbit_dyn = simulate_orbit_dynamics({"T": n_steps, "dt": dt_ins})
+        orbit_dyn_lam = orbit_dyn["lambda_collision"]  # array of 120 values
+        base_lam = orbit_dyn_lam[0]
         
-        # Fast generic SEV instead of running expensive MCMC fitting every time
+        # SEIARD epidemic-analogue claims stress index
+        epi = simulate_seiard_nsfd({"T": n_steps, "dt": dt_ins,
+            "init": [99500, 200, 150, 100, 50, 0],
+            "beta_i": 0.55, "beta_a": 0.35, "kappa": 0.3, "p_sym": 0.7,
+            "gamma_i": 0.18, "gamma_a": 0.2, "mu_i": 0.015,
+            "claim_rate_i": 1.0, "claim_rate_a": 0.3, "claim_rate_d": 1.0
+        })
+        epi_idx = epi["claims_index"]
+        epi_norm = epi_idx / max(1e-8, float(np.nanmean(epi_idx)))
+        
+        # Severity via GBMA-EVT
         rng = np.random.default_rng(123)
         losses = rng.lognormal(mean=11.2, sigma=0.95, size=5000)
         gbma = fit_gbma_threshold_model(losses)
@@ -89,7 +106,7 @@ def _build_satellite_payload_real(dataset):
     for i, sat in enumerate(dataset.satellites):
         sat_id = str(sat.norad_id)
         color = CATEGORY_COLORS.get(sat.category, "#00ffcc")
-        alt_display = sat.alt / 1000.0 if sat.alt > 100 else sat.alt  # Normalize altitude
+        alt_display = sat.alt  # Already in km from CelesTrak TLE data
 
         satellites.append({
             "id": sat_id,
@@ -130,35 +147,104 @@ def _build_satellite_payload_real(dataset):
         reserve_val = None
         
         if INSURANCE_ENABLED and sat.norad_id in prc_ids:
-            rho = 1e-11 * math.exp(-max(0, alt_display - 400) / 50.0)
+            alt_km = max(1.0, alt_display)  # Altitude in km
+            
+            # --- (1) Altitude-dependent atmospheric density ---
+            # LEO (<600km): dense atmosphere, strong drag → good avoidance
+            # MEO (600-2000km): thin atmosphere → poor drag avoidance
+            # GEO (>35000km): negligible atmosphere
+            if alt_km < 200:
+                rho = 2.5e-10
+            elif alt_km < 400:
+                rho = 1e-11 * math.exp(-(alt_km - 200) / 80.0)
+            elif alt_km < 600:
+                rho = 1e-12 * math.exp(-(alt_km - 400) / 100.0)
+            elif alt_km < 1000:
+                rho = 5e-14 * math.exp(-(alt_km - 600) / 200.0)
+            else:
+                rho = 1e-15  # MEO/GEO: essentially no drag
+            
+            # --- (2) Drag avoidance model (per-satellite) ---
+            # Vary mass by satellite type — lighter sats maneuver better
+            sat_mass = 120.0 if alt_km < 600 else (500.0 if alt_km < 2000 else 3000.0)
+            sat_area_nom = 1.2 if alt_km < 600 else (4.0 if alt_km < 2000 else 12.0)
+            sat_area_man = sat_area_nom * 2.5
+            
             drag_cfg = {
                 "rho": rho,
-                "relative_speed": 7600.0,
-                "cd": 2.2, "area_nominal": 1.2, "area_maneuver": 3.0, "mass": 200.0,
-                "drag_duration_sec": 43200, "time_to_tca_sec": 86400,
+                "relative_speed": 7600.0 if alt_km < 2000 else 3100.0,
+                "cd": 2.2,
+                "area_nominal": sat_area_nom,
+                "area_maneuver": sat_area_man,
+                "mass": sat_mass,
+                "drag_duration_sec": 43200,
+                "time_to_tca_sec": 86400,
                 "sigma_x": 50.0, "sigma_y": 50.0, "collision_radius": 5.0,
                 "x_miss_nominal": 20.0, "y_miss_nominal": 5.0
             }
             drag_res = aerodynamic_maneuver_effect(drag_cfg)
             mitigation = drag_res["risk_reduction"]
             pc_after = drag_res["Pc_after"]
-            orbit_risk = base_lam * (1.0 + (i % 10) * 0.1) # Add slight variation
             
+            # --- (3) Altitude-scaled orbit risk ---
+            # Debris density peaks at 750-900km (Kessler zone)
+            if alt_km < 400:
+                alt_risk_factor = 0.5
+            elif alt_km < 600:
+                alt_risk_factor = 1.0 + (alt_km - 400) / 200.0
+            elif alt_km < 1000:
+                alt_risk_factor = 2.0 + (alt_km - 600) * 0.005  # Peak zone
+            elif alt_km < 2000:
+                alt_risk_factor = 4.0 - (alt_km - 1000) * 0.003
+            elif alt_km < 36000:
+                alt_risk_factor = 1.0  # MEO: moderate
+            else:
+                alt_risk_factor = 0.3  # GEO: low debris
+            
+            orbit_risk = base_lam * alt_risk_factor
+            
+            # --- (4) Dynamic claim intensity (with SEIARD epidemic stress) ---
             base_claim_int = 0.06
             alpha_orbit = 2e-7
-            claim_int_val = base_claim_int + alpha_orbit * orbit_risk * (1 - mitigation)
+            beta_epi = 0.03
+            # Use the epidemic index at a representative time step
+            epi_factor = float(epi_norm[min(i % len(epi_norm), len(epi_norm) - 1)]) if epi_norm is not None else 1.0
+            
+            claim_int_val = (base_claim_int 
+                + alpha_orbit * orbit_risk * (1 - mitigation) 
+                + beta_epi * (epi_factor - 1.0))
             claim_int_val = max(1e-6, claim_int_val)
+            
+            # --- (5) Premium ---
             premium = (1 + 0.25) * claim_int_val * sev_mean
             
             claim_int = claim_int_val
-            premium_rate = (premium / 100000000.0) * 100.0 # vs 100m coverage
+            premium_rate = (premium / 100000000.0) * 100.0  # vs 100M coverage
             
-            # Simple instantaneous Thiele reserve step (T=1)
+            # --- (6) Full Thiele reserve (10yr, monthly steps) ---
+            n_res = 120
+            dt_res = 1.0 / 12.0
             b_state = np.array([0.0, 400000.0, 0.0])
             lam01 = min(0.5, 0.02 + 5e-8 * orbit_risk)
-            trans_lambda = lambda t: np.array([[0.0, lam01, claim_int_val], [0.0, 0.0, claim_int_val * 1.5], [0.0, 0.0, 0.0]])
+            lam02 = min(0.5, claim_int_val)
+            lam12 = min(0.8, claim_int_val * 1.5)
+            
+            def make_trans_lambda(l01, l02, l12):
+                def fn(t):
+                    return np.array([
+                        [0.0, l01, l02],
+                        [0.0, 0.0, l12],
+                        [0.0, 0.0, 0.0]
+                    ])
+                return fn
+            
             trans_payment = np.array([[0.0, 0.0, 8000000.0], [0.0, 0.0, 8000000.0], [0.0, 0.0, 0.0]])
-            res = solve_thiele_reserve(T=1, dt=1.0, r=0.02, b_state=b_state, trans_lambda=trans_lambda, trans_payment=trans_payment, terminal=np.array([0.0,0.0,0.0]))
+            res = solve_thiele_reserve(
+                T=10, dt=dt_res, r=0.02, b_state=b_state,
+                trans_lambda=make_trans_lambda(lam01, lam02, lam12),
+                trans_payment=trans_payment,
+                terminal=np.array([0.0, 0.0, 0.0])
+            )
             reserve_val = res[0, 0]
 
         if orbit_risk is not None:
