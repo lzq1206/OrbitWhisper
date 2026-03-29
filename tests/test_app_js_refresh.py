@@ -24,6 +24,18 @@ class TestAppJsRefresh(unittest.TestCase):
             source,
             re.compile(r"setInterval\s*\(\s*checkForReportUpdate\s*,\s*120000\s*\)\s*;"),
         )
+        self.assertRegex(
+            source,
+            re.compile(r"const\s+EXTERNAL_ORBIT_FEED_POLL_MS\s*=\s*60000\s*;"),
+        )
+        self.assertRegex(
+            source,
+            re.compile(r"function\s+normalizeExternalOrbitPayload\s*\("),
+        )
+        self.assertRegex(
+            source,
+            re.compile(r"window\.__orbitwhisperRefreshExternalOrbitFeed\s*=\s*refreshExternalOrbitFeed\s*;"),
+        )
 
     def test_engine_writes_data_under_root_data_dir(self):
         from src.engine.json_generator import generate_daily_outputs

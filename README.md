@@ -92,6 +92,20 @@ python -m http.server 8000
 # 打开 http://localhost:8000/
 ```
 
+### 前端实时轨道模式（可选）
+
+- 前端现在默认使用 Cesium `CallbackProperty` 进行持续轨道动画更新（无需刷新页面即可看到卫星移动）。
+- 如需对接外部轨道接口（例如与 LeoLabs 可视化接口风格一致的 JSON），可在页面 URL 里附加：
+
+```text
+http://localhost:8000/?orbitFeedUrl=https://your-orbit-api.example/path
+```
+
+- 接口返回可兼容以下任一结构：
+  - 顶层数组：`[{ asset_id|id|name, lat|latitude, lng|lon|longitude, alt|alt_km|altitude }]`
+  - 包裹字段：`{ orbits: [...] }` / `{ satellites: [...] }` / `{ data: [...] }`
+- 轮询频率为 60 秒，接口不可用时自动回退到本地 `data/daily_report.json` 结果。
+
 4. 运行测试
 ```bash
 python -m unittest discover tests

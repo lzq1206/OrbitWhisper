@@ -1,3 +1,52 @@
+const EXTERNAL_ORBIT_FEED_POLL_MS = 60000;
+
+function normalizeExternalOrbitPayload(payload) {
+  const candidates = Array.isArray(payload)
+    ? payload
+    : payload?.orbits || payload?.satellites || payload?.data || [];
+  if (!Array.isArray(candidates)) return [];
+  return candidates
+    .map((item, index) => {
+      const assetId = String(item?.asset_id || item?.id || item?.norad_id || item?.name || "").trim();
+      const name = String(item?.name || assetId || `EXT-${index + 1}`).trim();
+      const lat = Number(item?.lat ?? item?.latitude ?? item?.position?.lat ?? item?.position?.latitude);
+      const lng = Number(item?.lng ?? item?.lon ?? item?.longitude ?? item?.position?.lng ?? item?.position?.lon ?? item?.position?.longitude);
+      const alt = Number(item?.alt ?? item?.alt_km ?? item?.altitude ?? item?.position?.alt ?? item?.position?.alt_km ?? item?.position?.altitude ?? 550);
+      if (!assetId || !Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+      return { asset_id: assetId, name, lat, lng, alt: Number.isFinite(alt) ? alt : 550 };
+    })
+    .filter(Boolean);
+}
+
+function getExternalOrbitFeedUrl() {
+  const queryUrl = new URLSearchParams(window.location.search).get("orbitFeedUrl");
+  const configured = typeof window.ORBITWHISPER_ORBIT_FEED_URL === "string"
+    ? window.ORBITWHISPER_ORBIT_FEED_URL
+    : queryUrl;
+  if (!configured) return "";
+  try {
+    const parsed = new URL(configured, window.location.href);
+    if (!["http:", "https:"].includes(parsed.protocol)) return "";
+    return parsed.href;
+  } catch (_) {
+    return "";
+  }
+}
+
+async function fetchExternalOrbitFeed(url) {
+  if (!url) return [];
+  try {
+    const payload = await fetch(url, { cache: "no-store" }).then((r) => {
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json();
+    });
+    return normalizeExternalOrbitPayload(payload);
+  } catch (err) {
+    console.debug("OrbitWhisper external orbit feed unavailable:", err);
+    return [];
+  }
+}
+
 (async function bootstrap() {
   let report;
   try {
@@ -50,6 +99,8 @@
     viewer.scene.globe.enableLighting = true;
 
     const entityMap = {};
+    const orbitStateMap = {};
+    const orbitMap = {};
     const DEFAULT_SATELLITE_RADIUS = 0.5;
     const DEFAULT_SATELLITE_COLOR = "#00ffcc";
     const MIN_SATELLITE_RADIUS = 0.1;
@@ -64,48 +115,91 @@
       ]),
     );
     const ELLIPSOID_SCALE_METERS = 4000; // 经验缩放：将 0.5~0.8 的业务半径映射为约 2~3.2km，可在地球场景稳定可见
-    report.orbits.forEach((orbit) => {
+    const wrapLongitude = (value) => ((((value + 180) % 360) + 360) % 360) - 180;
+    const clampLatitude = (value) => Math.max(-85, Math.min(85, value));
+    const dynamicPositionForState = (state, time, result) => {
+      const currentOrbit = state.orbit;
+      const periodSec = Math.max(4800, 5600 + Number(currentOrbit.alt || 0) * 12);
+      const elapsedSec = Cesium.JulianDate.secondsDifference(time, state.startTime);
+      const phase = ((state.phaseDeg + (elapsedSec * 360) / periodSec) % 360) * (Math.PI / 180);
+      const latSwing = Math.max(2, Math.min(22, Math.abs(Number(currentOrbit.lat || 0)) * 0.5 + 6));
+      const dynamicLat = clampLatitude(Number(currentOrbit.lat || 0) + Math.sin(phase) * latSwing);
+      const dynamicLng = wrapLongitude(Number(currentOrbit.lng || 0) + (elapsedSec * 360) / periodSec);
+      return Cesium.Cartesian3.fromDegrees(dynamicLng, dynamicLat, safeAltitudeMeters(currentOrbit.alt), Cesium.Ellipsoid.WGS84, result);
+    };
+    const upsertOrbit = (orbit, index = 0) => {
+      const key = String(orbit.asset_id || "").toLowerCase();
+      if (!key) return;
       const satStyle = satelliteStyles[orbit.asset_id] || {
         radius: DEFAULT_SATELLITE_RADIUS,
         color: DEFAULT_SATELLITE_COLOR,
         isHighRisk: false,
       };
       const radius = Math.max(satStyle.radius, MIN_SATELLITE_RADIUS) * ELLIPSOID_SCALE_METERS;
-      const entity = viewer.entities.add({
-        id: orbit.asset_id,
-        name: orbit.name,
-        position: Cesium.Cartesian3.fromDegrees(orbit.lng, orbit.lat, safeAltitudeMeters(orbit.alt)),
-        point: { pixelSize: 9, color: Cesium.Color.CYAN },
-        ellipsoid: {
-          radii: new Cesium.Cartesian3(radius, radius, radius),
-          material: satStyle.isHighRisk ? Cesium.Color.RED.withAlpha(0.75) : Cesium.Color.CYAN.withAlpha(0.6),
-        },
-        label: {
-          text: orbit.asset_id,
-          font: "12px sans-serif",
-          fillColor: Cesium.Color.WHITE,
-          showBackground: true,
-          backgroundColor: Cesium.Color.fromAlpha(Cesium.Color.BLACK, 0.6),
-        },
-      });
-      entityMap[orbit.asset_id.toLowerCase()] = entity;
-    });
-    const orbitMap = Object.fromEntries(
-      report.orbits.map((orbit) => [orbit.asset_id.toLowerCase(), orbit]),
-    );
+      orbitMap[key] = orbit;
+      if (!orbitStateMap[key]) {
+        orbitStateMap[key] = {
+          orbit,
+          phaseDeg: (index * 137.5) % 360,
+          startTime: Cesium.JulianDate.now(),
+        };
+        const entity = viewer.entities.add({
+          id: orbit.asset_id,
+          name: orbit.name,
+          position: new Cesium.CallbackProperty((time, result) => dynamicPositionForState(orbitStateMap[key], time, result), false),
+          point: { pixelSize: 9, color: Cesium.Color.CYAN },
+          ellipsoid: {
+            radii: new Cesium.Cartesian3(radius, radius, radius),
+            material: satStyle.isHighRisk ? Cesium.Color.RED.withAlpha(0.75) : Cesium.Color.CYAN.withAlpha(0.6),
+          },
+          label: {
+            text: orbit.asset_id,
+            font: "12px sans-serif",
+            fillColor: Cesium.Color.WHITE,
+            showBackground: true,
+            backgroundColor: Cesium.Color.fromAlpha(Cesium.Color.BLACK, 0.6),
+          },
+        });
+        entityMap[key] = entity;
+      } else {
+        orbitStateMap[key].orbit = orbit;
+        const existing = entityMap[key];
+        if (existing) {
+          existing.name = orbit.name;
+          if (existing.label) existing.label.text = orbit.asset_id;
+        }
+      }
+    };
+    report.orbits.forEach((orbit, index) => upsertOrbit(orbit, index));
     window.focusSatellite = function focusSatellite(keyword) {
       const key = String(keyword || "").trim().toLowerCase();
       if (!key) return false;
+      const entity = entityMap[key];
+      if (entity) {
+        viewer.trackedEntity = entity;
+        viewer.flyTo(entity, { duration: 1.2 });
+        return true;
+      }
       const orbit = orbitMap[key];
       if (!orbit) return false;
-      const entity = entityMap[key];
-      if (entity) viewer.trackedEntity = entity;
       viewer.camera.flyTo({
         destination: Cesium.Cartesian3.fromDegrees(orbit.lng, orbit.lat, safeAltitudeMeters(orbit.alt) + 600000),
         duration: 1.2,
       });
       return true;
     };
+
+    const externalOrbitFeedUrl = getExternalOrbitFeedUrl();
+    async function refreshExternalOrbitFeed() {
+      if (!externalOrbitFeedUrl) return false;
+      const externalOrbits = await fetchExternalOrbitFeed(externalOrbitFeedUrl);
+      if (!externalOrbits.length) return false;
+      externalOrbits.forEach((orbit, index) => upsertOrbit(orbit, index));
+      return true;
+    }
+    window.__orbitwhisperRefreshExternalOrbitFeed = refreshExternalOrbitFeed;
+    refreshExternalOrbitFeed();
+    setInterval(refreshExternalOrbitFeed, EXTERNAL_ORBIT_FEED_POLL_MS);
 
     report.high_risk_events.forEach((evt, idx) => {
       const lon = 90 + idx * 15;
