@@ -103,6 +103,12 @@ def _build_satellite_payload_real(dataset):
         sev = expected_severity(gbma)
         sev_mean = sev["mean"]
 
+    # Pre-define constant actuarial parameters outside the loop
+    b_state_const = np.array([0.0, 400000.0, 0.0])
+    trans_payment_const = np.array([[0.0, 0.0, 8000000.0], [0.0, 0.0, 8000000.0], [0.0, 0.0, 0.0]])
+    dt_res = 1.0 / 12.0
+    loading_const = 1.25 # (1 + 0.25)
+    
     for i, sat in enumerate(dataset.satellites):
         sat_id = str(sat.norad_id)
         color = CATEGORY_COLORS.get(sat.category, "#00ffcc")
@@ -154,13 +160,10 @@ def _build_satellite_payload_real(dataset):
         premium_rate = None
         reserve_val = None
         
-        if INSURANCE_ENABLED and sat.norad_id in prc_ids:
+        if INSURANCE_ENABLED:
             alt_km = max(1.0, alt_display)  # Altitude in km
             
             # --- (1) Altitude-dependent atmospheric density ---
-            # LEO (<600km): dense atmosphere, strong drag → good avoidance
-            # MEO (600-2000km): thin atmosphere → poor drag avoidance
-            # GEO (>35000km): negligible atmosphere
             if alt_km < 200:
                 rho = 2.5e-10
             elif alt_km < 400:
@@ -173,7 +176,6 @@ def _build_satellite_payload_real(dataset):
                 rho = 1e-15  # MEO/GEO: essentially no drag
             
             # --- (2) Drag avoidance model (per-satellite) ---
-            # Vary mass by satellite type — lighter sats maneuver better
             sat_mass = 120.0 if alt_km < 600 else (500.0 if alt_km < 2000 else 3000.0)
             sat_area_nom = 1.2 if alt_km < 600 else (4.0 if alt_km < 2000 else 12.0)
             sat_area_man = sat_area_nom * 2.5
@@ -195,19 +197,18 @@ def _build_satellite_payload_real(dataset):
             pc_after = drag_res["Pc_after"]
             
             # --- (3) Altitude-scaled orbit risk ---
-            # Debris density peaks at 750-900km (Kessler zone)
             if alt_km < 400:
                 alt_risk_factor = 0.5
             elif alt_km < 600:
                 alt_risk_factor = 1.0 + (alt_km - 400) / 200.0
             elif alt_km < 1000:
-                alt_risk_factor = 2.0 + (alt_km - 600) * 0.005  # Peak zone
+                alt_risk_factor = 2.0 + (alt_km - 600) * 0.005
             elif alt_km < 2000:
                 alt_risk_factor = 4.0 - (alt_km - 1000) * 0.003
             elif alt_km < 36000:
-                alt_risk_factor = 1.0  # MEO: moderate
+                alt_risk_factor = 1.0 
             else:
-                alt_risk_factor = 0.3  # GEO: low debris
+                alt_risk_factor = 0.3 
             
             orbit_risk = base_lam * alt_risk_factor
             
@@ -215,7 +216,6 @@ def _build_satellite_payload_real(dataset):
             base_claim_int = 0.06
             alpha_orbit = 2e-7
             beta_epi = 0.03
-            # Use the epidemic index at a representative time step
             epi_factor = float(epi_norm[min(i % len(epi_norm), len(epi_norm) - 1)]) if epi_norm is not None else 1.0
             
             claim_int_val = (base_claim_int 
@@ -224,33 +224,28 @@ def _build_satellite_payload_real(dataset):
             claim_int_val = max(1e-6, claim_int_val)
             
             # --- (5) Premium ---
-            premium = (1 + 0.25) * claim_int_val * sev_mean
+            premium = loading_const * claim_int_val * sev_mean
             
             claim_int = claim_int_val
-            premium_rate = (premium / 100000000.0) * 100.0  # vs 100M coverage
+            premium_rate = (premium / 100000000.0) * 100.0 
             
             # --- (6) Full Thiele reserve (10yr, monthly steps) ---
-            n_res = 120
-            dt_res = 1.0 / 12.0
-            b_state = np.array([0.0, 400000.0, 0.0])
-            lam01 = min(0.5, 0.02 + 5e-8 * orbit_risk)
-            lam02 = min(0.5, claim_int_val)
-            lam12 = min(0.8, claim_int_val * 1.5)
+            l01 = min(0.5, 0.02 + 5e-8 * orbit_risk)
+            l02 = min(0.5, claim_int_val)
+            l12 = min(0.8, claim_int_val * 1.5)
             
-            def make_trans_lambda(l01, l02, l12):
-                def fn(t):
-                    return np.array([
-                        [0.0, l01, l02],
-                        [0.0, 0.0, l12],
-                        [0.0, 0.0, 0.0]
-                    ])
-                return fn
+            def trans_lam_internal(t):
+                # Using constants from closure for speed
+                return np.array([
+                    [0.0, l01, l02],
+                    [0.0, 0.0, l12],
+                    [0.0, 0.0, 0.0]
+                ])
             
-            trans_payment = np.array([[0.0, 0.0, 8000000.0], [0.0, 0.0, 8000000.0], [0.0, 0.0, 0.0]])
             res = solve_thiele_reserve(
-                T=10, dt=dt_res, r=0.02, b_state=b_state,
-                trans_lambda=make_trans_lambda(lam01, lam02, lam12),
-                trans_payment=trans_payment,
+                T=10, dt=dt_res, r=0.02, b_state=b_state_const,
+                trans_lambda=trans_lam_internal,
+                trans_payment=trans_payment_const,
                 terminal=np.array([0.0, 0.0, 0.0])
             )
             reserve_val = res[0, 0]
