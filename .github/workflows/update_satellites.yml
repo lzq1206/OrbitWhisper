@@ -1,0 +1,81 @@
+name: update-satellites
+
+on:
+  schedule:
+    # Run every 6 hours to keep satellite TLE data fresh
+    - cron: "30 0,6,12,18 * * *"
+  workflow_dispatch:
+    inputs:
+      include_large:
+        description: "Include large constellations (Starlink, OneWeb, etc.)"
+        required: false
+        default: "true"
+        type: choice
+        options:
+          - "false"
+          - "true"
+
+permissions:
+  contents: write
+
+jobs:
+  fetch-and-update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests sgp4
+
+      - name: Fetch satellite data from CelesTrak
+        run: |
+          LARGE_FLAG=""
+          if [ "${{ github.event.inputs.include_large }}" = "true" ]; then
+            LARGE_FLAG="--include-large"
+          fi
+          python fetch_satellites.py $LARGE_FLAG -o data/satellites.json
+
+      - name: Show satellite statistics
+        run: |
+          python -c "
+          import json
+          from pathlib import Path
+          data = json.loads(Path('data/satellites.json').read_text())
+          print(f'Total satellites: {data[\"total_satellites\"]}')
+          print('Category counts:')
+          for cat, count in data.get('category_counts', {}).items():
+              print(f'  {cat}: {count}')
+          "
+
+      - name: Commit updated satellite data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/satellites.json
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore: update satellite data from CelesTrak [skip ci]"
+            git push
+          fi
+
+      - name: Generate daily report with real satellites
+        run: |
+          pip install -r requirements.txt
+          python -m src.engine.json_generator
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: ./
+          force_orphan: true

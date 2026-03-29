@@ -9,10 +9,10 @@ permissions:
   contents: write
 
 jobs:
-  collect-real-tles:
+  collect-real-satellites:
     runs-on: ubuntu-latest
     outputs:
-      tle_artifact: latest-tles
+      satellite_artifact: latest-satellites
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,48 +25,21 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install requests sgp4
 
-      - name: Fetch real TLEs from CelesTrak NORAD elements
+      - name: Fetch satellite data from CelesTrak
         run: |
-          python - <<'PY'
-          import os
-          import sys
-          import json
-          from pathlib import Path
+          python fetch_satellites.py --include-large -o data/satellites.json
 
-          from src.data.tle_fetcher import SpaceTrackClient
-
-          output_path = Path("data/latest_tles.json")
-          output_path.parent.mkdir(parents=True, exist_ok=True)
-
-          ids = [25544, 40967, 33591, 43013, 44713]
-          client = SpaceTrackClient()
-          try:
-              tles = client.get_public_file_tles_by_ids(ids)
-          except Exception as exc:
-              print(f"WARNING: CelesTrak query failed: {exc}", file=sys.stderr)
-              try:
-                  tles = client.get_latest_tle_by_ids(ids)
-              except Exception as inner_exc:
-                  print(f"WARNING: CelesTrak fallback query failed: {inner_exc}", file=sys.stderr)
-                  tles = []
-          output_path.write_text(
-              json.dumps({"source": "celestrak", "count": len(tles), "tles": tles}, ensure_ascii=False, indent=2),
-              encoding="utf-8",
-          )
-          print(f"Fetched {len(tles)} TLE records.")
-          PY
-
-      - name: Upload TLE artifact
+      - name: Upload satellite data artifact
         uses: actions/upload-artifact@v4
         with:
-          name: latest-tles
-          path: data/latest_tles.json
+          name: latest-satellites
+          path: data/satellites.json
           retention-days: 1
 
   compute-and-deploy:
-    needs: collect-real-tles
+    needs: collect-real-satellites
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -82,10 +55,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Download TLE artifact
+      - name: Download satellite data artifact
         uses: actions/download-artifact@v4
         with:
-          name: latest-tles
+          name: latest-satellites
           path: data
 
       - name: Run daily compute pipeline
@@ -98,17 +71,37 @@ jobs:
           import json
           from pathlib import Path
           report = json.loads(Path("data/daily_report.json").read_text(encoding="utf-8"))
+          sat_count = report.get("hud_data", {}).get("satellite_count", 0)
+          cat_stats = report.get("hud_data", {}).get("category_stats", {})
           lines = [
               "# AstroQuant 3D Daily Compute Report",
               "",
               f"- Generated at: `{report['generated_at']}`",
+              f"- Total satellites: **{sat_count}**",
               f"- Collision events: **{len(report.get('collision_events', []))}**",
               f"- High risk events (<5km): **{len(report.get('high_risk_events', []))}**",
               f"- Priced assets: **{len(report.get('asset_pricing', []))}**",
               "",
+              "## Satellite Categories",
+              "",
           ]
+          for cat, count in cat_stats.items():
+              lines.append(f"- {cat}: **{count}**")
+          lines.append("")
           Path("data/daily_report.md").write_text("\n".join(lines), encoding="utf-8")
           PY
+
+      - name: Commit updated data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore: update daily report with CelesTrak satellite data"
+            git push
+          fi
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
