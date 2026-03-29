@@ -35,11 +35,12 @@ class SatelliteRecord:
     norad_id: int
     category: str
     status: str
-    line1: str
-    line2: str
-    lat: float
-    lng: float
-    alt: float  # in km
+    group: str = ""
+    line1: str = ""
+    line2: str = ""
+    lat: float = 0.0
+    lng: float = 0.0
+    alt: float = 0.0   # in km
     epoch: str = ""
 
 
@@ -92,6 +93,7 @@ def _load_real_satellites(path: Path) -> list[SatelliteRecord]:
             norad_id=norad_id,
             category=category,
             status=status,
+            group=item.get("group", ""),
             line1=line1,
             line2=line2,
             lat=lat,

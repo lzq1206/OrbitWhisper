@@ -176,7 +176,7 @@ def fetch_group_tle(session: requests.Session, group: str, timeout: int = 30) ->
     return results
 
 
-def process_tle_satellite(tle_record: dict[str, str], category: str, now: datetime, is_decayed: bool = False) -> dict[str, Any] | None:
+def process_tle_satellite(tle_record: dict[str, str], category: str, group: str, now: datetime, is_decayed: bool = False) -> dict[str, Any] | None:
     """Process a single satellite TLE record into our output format."""
     name = tle_record.get("name", "UNKNOWN").strip()
     line1 = tle_record.get("line1", "").strip()
@@ -224,6 +224,7 @@ def process_tle_satellite(tle_record: dict[str, str], category: str, now: dateti
         "norad_id": norad_id,
         "name": name if name else f"SAT-{norad_id}",
         "category": category,
+        "group": group,
         "status": status,
         "lat": lat,
         "lng": lng,
@@ -304,7 +305,7 @@ def fetch_all_satellites(include_large: bool = False, existing_file_path: str = 
                     continue
                 is_decayed = nid in decayed_ids
                 
-                sat = process_tle_satellite(tle_record, category, now, is_decayed)
+                sat = process_tle_satellite(tle_record, category, group, now, is_decayed)
                 if sat is None:
                     continue
                 nid = sat["norad_id"]

@@ -9,6 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.0/echarts.min.js" integrity="sha384-o5uz97et3bErHvpKfD4Jz4n0JfhJDWABFuF4NP+iEEDxE1VwMWJ19QGR0lqFZnr6" crossorigin="anonymous"></script>
   <script src="https://cesium.com/downloads/cesiumjs/releases/1.120/Build/Cesium/Cesium.js" integrity="sha384-u6lI9nKeZ0sgcSQty6qC4XQHU/ZG7JJ8PfRvtUQTH83OstsiEivIu3F9k012EB3W" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/satellite.js/5.0.0/satellite.min.js"></script>
   <link href="https://cesium.com/downloads/cesiumjs/releases/1.120/Build/Cesium/Widgets/widgets.css" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
 </head>
@@ -32,7 +33,13 @@
     <div class="sidebar-section">
       <div class="section-title">卫星分类筛选</div>
       <div id="categoryFilters"></div>
-      <div class="filter-actions">
+      <div class="filter-actions" style="margin-top: 8px;">
+        <label style="display: flex; align-items: center; cursor: pointer; color: #ff4757; font-weight: 600;">
+          <input type="checkbox" id="prcOnlyToggle" style="margin-right: 6px;">
+          🇨🇳 仅显示中国在轨资产 (PRC)
+        </label>
+      </div>
+      <div class="filter-actions" style="margin-top: 8px;">
         <button id="selectAllBtn" class="action-btn">全选</button>
         <button id="deselectAllBtn" class="action-btn">全不选</button>
       </div>
@@ -76,6 +83,7 @@
 
   <!-- ── Bottom Status Bar ── -->
   <div id="bottomBar">
+    <span id="clockDisplay" style="margin-right: 15px; font-family: monospace; color: #00ffcc;"></span>
     <span id="bottomStatus">正在加载卫星数据...</span>
     <span id="bottomCount"></span>
   </div>

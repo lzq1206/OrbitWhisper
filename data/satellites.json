@@ -1,20 +1,20 @@
 {
-  "generated_at": "2026-03-29T05:24:46+00:00",
+  "generated_at": "2026-03-29T08:27:49+00:00",
   "source": "celestrak",
   "total_satellites": 2953,
   "category_counts": {
     "空间站与特殊兴趣": 520,
+    "其他": 97,
+    "导航卫星": 90,
     "气象与地球资源": 508,
     "通信卫星": 902,
-    "导航卫星": 90,
     "科学卫星": 77,
-    "其他": 97,
     "大型星座": 759
   },
   "group_counts": {
     "stations": 31,
     "visual": 147,
-    "last-30-days": 346,
+    "last-30-days": 347,
     "weather": 70,
     "noaa": 23,
     "goes": 19,
@@ -49,10 +49,7 @@
     "military": 22,
     "radar": 10,
     "cubesat": 87,
-    "other": 1,
-    "starlink": 0,
-    "oneweb": 651,
-    "qianfan": 108
+    "other": 1
   },
   "satellites": [
     {

@@ -106,15 +106,20 @@ def _build_satellite_payload_real(dataset):
             "suggested_premium": 0.0,
         })
 
+        is_prc = sat.norad_id in prc_ids
         orbits.append({
             "asset_id": sat_id,
             "name": sat.name,
             "norad_id": sat.norad_id,
             "category": sat.category,
+            "group": sat.group,
+            "is_prc": is_prc,
             "lat": round(sat.lat, 6),
             "lng": round(sat.lng, 6),
             "alt": round(alt_display, 6),
             "status": getattr(sat, "status", "active"),
+            "line1": sat.line1,
+            "line2": sat.line2,
         })
         
         # Calculate dynamic insurance metrics if enabled

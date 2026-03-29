@@ -40,16 +40,59 @@ const wrapLng = v => ((((v + 180) % 360) + 360) % 360) - 180;
 const clampLat = v => Math.max(-85, Math.min(85, v));
 const safeAltM = km => { const a = Number(km); return Number.isFinite(a) ? Math.max(a, 0) * 1000 : 550000; };
 
+// ── True physical orbit calculation (SGP4) ──
 function calcPosition(state, time, result) {
   const o = state.orbit;
-  const period = Math.max(MIN_ORBIT_PERIOD_SEC, BASE_ORBIT_PERIOD_SEC + Number(o.alt || 0) * ORBIT_PERIOD_ALTITUDE_FACTOR);
-  const elapsed = Cesium.JulianDate.secondsDifference(time, state.startTime);
-  const phase = ((state.phaseDeg + (elapsed * 360) / period) % 360) * (Math.PI / 180);
-  const swing = Math.max(2, Math.min(22, Math.abs(Number(o.lat || 0)) * 0.5 + 6));
-  const lat = clampLat(Number(o.lat || 0) + Math.sin(phase) * swing);
-  const lng = wrapLng(Number(o.lng || 0) + (elapsed * 360) / period);
-  return Cesium.Cartesian3.fromDegrees(lng, lat, safeAltM(o.alt), Cesium.Ellipsoid.WGS84, result);
+  
+  // If TLE is not available or it's just a mocked point, fallback to stationary point
+  if (!o.line1 || !o.line2) {
+    return Cesium.Cartesian3.fromDegrees(
+      Number(o.lng || 0), 
+      Math.max(-89.9, Math.min(89.9, Number(o.lat || 0))), 
+      safeAltM(o.alt), 
+      Cesium.Ellipsoid.WGS84, result);
+  }
+
+  // Use satellite.js to project actual XYZ based on current Julian Time -> Date
+  try {
+    if (!state.satrec) {
+      state.satrec = satellite.twoline2satrec(o.line1, o.line2);
+    }
+    const jsDate = Cesium.JulianDate.toDate(time);
+    const positionAndVelocity = satellite.propagate(state.satrec, jsDate);
+    
+    // If propagation fails, fallback to original point
+    if (!positionAndVelocity.position) {
+      return Cesium.Cartesian3.fromDegrees(Number(o.lng || 0), Number(o.lat || 0), safeAltM(o.alt), Cesium.Ellipsoid.WGS84, result);
+    }
+    
+    // Convert to Geodetic
+    const gmst = satellite.gstime(jsDate);
+    const gd = satellite.eciToGeodetic(positionAndVelocity.position, gmst);
+    const lng = satellite.degreesLong(gd.longitude);
+    const lat = satellite.degreesLat(gd.latitude);
+    const altM = Math.max(0, gd.height * 1000); // height is in km, scale to meters
+    
+    // Assign back to orbit object for the UI side panel binding updates
+    o.lng = lng;
+    o.lat = lat;
+    o.alt = gd.height;
+    
+    return Cesium.Cartesian3.fromDegrees(lng, lat, altM, Cesium.Ellipsoid.WGS84, result);
+  } catch(e) {
+    return Cesium.Cartesian3.fromDegrees(Number(o.lng || 0), Number(o.lat || 0), safeAltM(o.alt), Cesium.Ellipsoid.WGS84, result);
+  }
 }
+
+function updateClock() {
+  const clockEl = document.getElementById("clockDisplay");
+  if (clockEl) {
+    const now = new Date();
+    clockEl.textContent = now.toISOString().replace('T', ' ').substr(0, 19) + " UTC";
+  }
+  requestAnimationFrame(updateClock);
+}
+requestAnimationFrame(updateClock);
 
 function getApiBases() {
   const localBase = `${window.location.protocol}//${window.location.hostname}:8000`;
@@ -174,6 +217,8 @@ function toggleCategory(cat, show) {
 
 function applyFilters() {
   let visibleCount = 0;
+  const prcToggle = document.getElementById("prcOnlyToggle");
+  const prcOnly = prcToggle ? prcToggle.checked : false;
 
   allOrbits.forEach(orbit => {
     const key = String(orbit.asset_id || "").toLowerCase();
@@ -181,7 +226,12 @@ function applyFilters() {
     if (!entity) return;
 
     const cat = orbit.category || "其他";
-    const shouldShow = visibleCategories.has(cat);
+    let shouldShow = visibleCategories.has(cat);
+    
+    if (prcOnly && orbit.is_prc !== true) {
+      shouldShow = false;
+    }
+    
     entity.show = shouldShow;
     if (shouldShow) visibleCount++;
   });
@@ -495,7 +545,19 @@ function searchSatellites(keyword) {
 
   // ── Add all satellites ──
   console.time("addSatellites");
-  allOrbits.forEach(orbit => addSatelliteEntity(orbit));
+  allOrbits.forEach(orbit => {
+    const key = String(orbit.asset_id || "").toLowerCase();
+    orbitMap[key] = orbit;
+    addSatelliteEntity(orbit);
+  });
+  
+  const prcToggle = document.getElementById("prcOnlyToggle");
+  if(prcToggle) {
+    prcToggle.addEventListener("change", applyFilters);
+  }
+  
+  applyFilters();
+  buildLegend(catStats);
   console.timeEnd("addSatellites");
 
   // ── Render collision math high risk events ──
