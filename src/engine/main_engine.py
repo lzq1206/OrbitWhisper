@@ -256,21 +256,20 @@ def _build_satellite_payload_real(dataset):
                 "reserve": reserve_val
             })
 
-        # Simplified pricing for real satellites
-        pof = max(0.01, 0.35 - (i % 20) * 0.01)
-        premium = pof * (50_000_000.0 + (i % 10) * 8_000_000.0) * 0.35 * 1.25
+        # Generate Survival Curve (use dynamic insurance claim_int if available, else a base default)
+        surv_lambda = claim_int if claim_int is not None else 0.02
+        
         asset_pricing.append({
             "asset_id": sat_id,
             "name": sat.name,
-            "pof_12m": round(pof, 6),
-            "expected_loss": round(pof * 50_000_000.0 * 0.35, 2),
-            "pure_premium": round(premium, 2),
+            "pof_12m": round(surv_lambda, 6),
+            "expected_loss": round(surv_lambda * sev_mean if claim_int is not None else surv_lambda * 50_000_000, 2),
+            "pure_premium": round(premium_rate * 1000000 if premium_rate is not None else surv_lambda * 50_000_000 * 1.25, 2),
             "survival_curve": [
-                {"timeline_days": day, "survival_prob": round(math.exp(-pof * day / 365.0), 6)}
-                for day in (0, 30, 90, 180, 270, 365)
+                {"timeline_days": day, "survival_prob": round(math.exp(-surv_lambda * day / 365.0), 6)}
+                for day in (0, 30, 90, 180, 270, 365, 730, 1825, 3650)  # Extended out to 10 years
             ],
         })
-
     # Category statistics
     category_stats = {}
     for sat in dataset.satellites:

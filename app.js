@@ -27,6 +27,7 @@ let allOrbits = [];               // full satellite database from report
 let entityMap = {};
 let orbitStateMap = {};
 let orbitMap = {};
+let pricingMap = {};
 let nextOrbitPhaseIndex = 0;
 let viewer = null;
 let pendingTempId = '';
@@ -443,6 +444,14 @@ function showDetailPanel(orbit) {
 
   const name = orbit.name || orbit.asset_id;
   title.textContent = name;
+  
+  // Show survival chart if available
+  const pricing = pricingMap[String(orbit.norad_id || orbit.asset_id)];
+  if (pricing) {
+    showSurvivalChart(pricing);
+  } else {
+    document.getElementById("chartPanel").classList.add("hidden");
+  }
 
   const cat = orbit.category || "其他";
   const color = CATEGORY_COLORS[cat] || "#aaa";
@@ -638,6 +647,35 @@ function searchSatellites(keyword) {
   viewer.scene.backgroundColor = Cesium.Color.fromCssColorString("#0a0e17");
   viewer.scene.screenSpaceCameraController.minimumZoomDistance = 500000;
 
+  window.showSurvivalChart = function(pricing) {
+    if (!window.echarts) return;
+    document.getElementById("chartPanel").classList.remove("hidden");
+    const chart = echarts.init(document.getElementById("survivalChart"));
+    chart.setOption({
+      backgroundColor: "transparent",
+      title: { text: `${pricing.name || pricing.asset_id} 生存曲线预测`, textStyle: { color: "#d9e5ff", fontSize: 13 } },
+      grid: { left: 40, right: 10, top: 30, bottom: 20 },
+      xAxis: {
+        type: "category",
+        data: pricing.survival_curve.map(p => p.timeline_days + "d"),
+        axisLabel: { color: "#8fa8cc", fontSize: 10 },
+      },
+      yAxis: { type: "value", min: 0, max: 1, axisLabel: { color: "#8fa8cc", fontSize: 10 }, splitLine: { lineStyle: { color: 'rgba(255,255,255,0.05)' } } },
+      series: [{
+        type: "line",
+        smooth: true,
+        data: pricing.survival_curve.map(p => p.survival_prob),
+        lineStyle: { color: "#58a6ff", width: 3 },
+        areaStyle: { 
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: 'rgba(88,166,255,0.6)' },
+            { offset: 1, color: 'rgba(88,166,255,0.0)' }
+          ])
+        },
+      }],
+    });
+  };
+
   // ── Add all satellites ──
   console.time("addSatellites");
   allOrbits.forEach(orbit => {
@@ -677,33 +715,14 @@ function searchSatellites(keyword) {
     });
   }
 
-  // ── Actuarial model survival curve ──
-  const firstPricing = report.asset_pricing && report.asset_pricing[0];
-  if (firstPricing && window.echarts) {
-    document.getElementById("chartPanel").classList.remove("hidden");
-    const chart = echarts.init(document.getElementById("survivalChart"));
-    chart.setOption({
-      backgroundColor: "transparent",
-      title: { text: `${firstPricing.asset_id} 生存预测`, textStyle: { color: "#d9e5ff", fontSize: 13 } },
-      grid: { left: 40, right: 10, top: 30, bottom: 20 },
-      xAxis: {
-        type: "category",
-        data: firstPricing.survival_curve.map(p => p.timeline_days),
-        axisLabel: { color: "#8fa8cc", fontSize: 10 },
-      },
-      yAxis: { type: "value", min: 0, max: 1, axisLabel: { color: "#8fa8cc", fontSize: 10 }, splitLine: { lineStyle: { color: 'rgba(255,255,255,0.05)' } } },
-      series: [
-        {
-          type: "line",
-          smooth: true,
-          data: firstPricing.survival_curve.map(p => p.survival_prob),
-          lineStyle: { color: "#58a6ff" },
-          areaStyle: { color: "rgba(88,166,255,0.2)" },
-        },
-      ],
+  // Populate pricing map
+  if (Array.isArray(report.asset_pricing)) {
+    report.asset_pricing.forEach(p => {
+      pricingMap[String(p.asset_id)] = p;
     });
   }
 
+  // Set up chart close button
   document.getElementById("chartClose").addEventListener("click", () => {
     document.getElementById("chartPanel").classList.add("hidden");
   });

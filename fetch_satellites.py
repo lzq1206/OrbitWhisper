@@ -185,6 +185,13 @@ def process_tle_satellite(tle_record: dict[str, str], category: str, group: str,
     if not line1.startswith("1 ") or not line2.startswith("2 "):
         return None
 
+    if not group and category == "大型星座":
+        n_up = name.upper()
+        if "STARLINK" in n_up: group = "starlink"
+        elif "QIANFAN" in n_up: group = "qianfan"
+        elif "ONEWEB" in n_up: group = "oneweb"
+        else: group = "other-large"
+
     try:
         norad_id = int(line1[2:7].strip())
     except (ValueError, IndexError):
