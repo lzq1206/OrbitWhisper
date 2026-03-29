@@ -32,8 +32,8 @@ class SpaceTrackClient:
     ) -> None:
         self.timeout = timeout
         self.session = requests.Session()
-        # Keep backward-compatible constructor signature; credentials are unused for CelesTrak.
-        _ = (username, password, os.getenv("SPACETRACK_USER"), os.getenv("SPACETRACK_PWD"))
+        # Keep backward-compatible constructor signature; credentials are intentionally unused for CelesTrak.
+        _ = (username, password)
         load_dotenv()
 
     def _login(self) -> None:

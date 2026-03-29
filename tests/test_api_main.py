@@ -61,6 +61,27 @@ class TestOpticalApi(unittest.TestCase):
         self.assertEqual(dup_payload["satellite"]["name"], "ISS-A")
         self.assertIn("orbit", dup_payload)
 
+    def test_upload_tle_updates_existing_satellite_when_catalog_id_matches(self):
+        old_tle_text = (
+            "ISS\n"
+            "1 25544U 98067A   24068.52754500  .00020000  00000-0  29677-4 0  9994\n"
+            "2 25544  51.6418  72.8432 0004908  56.6248  85.7564 15.50000000444823"
+        )
+        new_tle_text = (
+            "ISS\n"
+            "1 25544U 98067A   24069.52754500  .00021000  00000-0  29680-4 0  9995\n"
+            "2 25544  51.6419  72.8433 0004909  56.6249  85.7565 15.50001000444824"
+        )
+        first = self.client.post("/api/upload_tle", json={"tle_text": old_tle_text, "name": "ISS-A"})
+        self.assertEqual(first.status_code, 200)
+        second = self.client.post("/api/upload_tle", json={"tle_text": new_tle_text, "name": "ISS-B"})
+        self.assertEqual(second.status_code, 200)
+        payload = second.json()
+        self.assertFalse(payload["duplicate"])
+        self.assertTrue(payload["updated"])
+        self.assertEqual(payload["satellite"]["name"], "ISS-A")
+        self.assertEqual(payload["satellite"]["line1"], new_tle_text.splitlines()[1])
+
     def test_upload_tle_accepts_extra_header_lines(self):
         tle_text = (
             "Downloaded from CelesTrak\n"

@@ -73,14 +73,16 @@ def _parse_tle_text(tle_text: str) -> tuple[str, str, str | None]:
     raise ValueError("TLE format invalid: expected line1/line2 with prefixes '1 ' and '2 '")
 
 
-def _extract_norad_catalog_id(line1: str) -> str | None:
+def _extract_norad_catalog_id(line1: str) -> int | None:
     cat_id = line1[2:7].strip() if len(line1) >= 7 else ""
-    return cat_id if cat_id.isdigit() else None
+    return int(cat_id) if cat_id.isdigit() else None
 
 
 def _build_preview_orbit(name: str, line1: str) -> dict[str, Any]:
     cat_id = _extract_norad_catalog_id(line1)
-    seed = int(cat_id) if cat_id else abs(hash(name)) % 100_000
+    # Keep deterministic pseudo-positions for uploaded TLE preview when no propagated track exists yet.
+    # 100_000 bounds the hash-derived seed to a stable small range while preserving visual spread.
+    seed = cat_id if cat_id is not None else abs(hash(name)) % 100_000
     lat = ((seed % 140) - 70) * 0.8
     lng = ((seed * 7) % 360) - 180
     alt = 420 + (seed % 500)
@@ -188,15 +190,25 @@ def upload_tle(payload: TLEUploadRequest) -> dict[str, Any]:
     uploaded_cat_id = _extract_norad_catalog_id(line1)
     for existing in UPLOADED_TLES:
         existing_cat_id = _extract_norad_catalog_id(str(existing.get("line1", "")))
-        if (existing.get("line1") == line1 and existing.get("line2") == line2) or (
-            uploaded_cat_id is not None and existing_cat_id == uploaded_cat_id
-        ):
+        if existing.get("line1") == line1 and existing.get("line2") == line2:
             existing_name = str(existing.get("name", ""))
             return {
                 "message": "TLE already exists",
                 "duplicate": True,
                 "satellite": existing,
                 "orbit": _build_preview_orbit(existing_name, str(existing.get("line1", ""))),
+            }
+        if uploaded_cat_id is not None and existing_cat_id == uploaded_cat_id:
+            existing["line1"] = line1
+            existing["line2"] = line2
+            existing["created_at"] = datetime.now(timezone.utc).isoformat()
+            existing_name = str(existing.get("name", ""))
+            return {
+                "message": "TLE updated",
+                "duplicate": False,
+                "updated": True,
+                "satellite": existing,
+                "orbit": _build_preview_orbit(existing_name, line1),
             }
     record = {
         "name": payload.name or inferred_name or f"TLE-{len(UPLOADED_TLES) + 1}",
