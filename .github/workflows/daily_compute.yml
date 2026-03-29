@@ -27,10 +27,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Fetch real TLEs from Space-Track
+      - name: Fetch real TLEs from Space-Track public files
         env:
           SPACETRACK_USER: ${{ secrets.SPACETRACK_USER }}
           SPACETRACK_PWD: ${{ secrets.SPACETRACK_PWD }}
+          SPACETRACK_IDENTITY: ${{ secrets.SPACETRACK_IDENTITY }}
+          SPACETRACK_PASSWORD: ${{ secrets.SPACETRACK_PASSWORD }}
         run: |
           python - <<'PY'
           import os
@@ -42,18 +44,26 @@ jobs:
           output_path = Path("data/latest_tles.json")
           output_path.parent.mkdir(parents=True, exist_ok=True)
 
-          if not (os.getenv("SPACETRACK_USER") and os.getenv("SPACETRACK_PWD")):
+          username = os.getenv("SPACETRACK_USER") or os.getenv("SPACETRACK_IDENTITY")
+          password = os.getenv("SPACETRACK_PWD") or os.getenv("SPACETRACK_PASSWORD")
+
+          if not (username and password):
               output_path.write_text(json.dumps({"source": "fallback", "tles": []}, ensure_ascii=False, indent=2), encoding="utf-8")
               print("WARNING: Space-Track credentials not configured, using fallback dataset without real TLEs.")
               import sys
               sys.exit(0)
 
+          os.environ["SPACETRACK_USER"] = username
+          os.environ["SPACETRACK_PWD"] = password
           ids = [25544, 40967, 33591, 43013, 44713]
           client = SpaceTrackClient()
           try:
-              tles = client.get_latest_tle_by_ids(ids)
+              tles = client.get_public_file_tles_by_ids(ids)
           except Exception:
-              tles = []
+              try:
+                  tles = client.get_latest_tle_by_ids(ids)
+              except Exception:
+                  tles = []
           output_path.write_text(
               json.dumps({"source": "space-track", "count": len(tles), "tles": tles}, ensure_ascii=False, indent=2),
               encoding="utf-8",

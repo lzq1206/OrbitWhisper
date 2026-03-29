@@ -124,7 +124,7 @@ python -m unittest discover tests
   - `schedule`: 每 6 小时一次（`00:00 / 06:00 / 12:00 / 18:00 UTC`）
   - `workflow_dispatch`: 手动触发
 - 步骤：
-  1. **collect-real-tles**：从 Space-Track 拉取真实 TLE（未配置密钥时自动回退）
+  1. **collect-real-tles**：优先通过 Space-Track public files 接口拉取真实 TLE（未配置密钥时自动回退，且会兼容 `SPACETRACK_USER/SPACETRACK_PWD` 与 `SPACETRACK_IDENTITY/SPACETRACK_PASSWORD` 两套 Secrets 命名）
   2. **compute-and-deploy**：运行 `src.engine` 计算并生成 JSON/Markdown
   3. 发布仓库根目录到 `gh-pages`（网页随仓库改动自动更新）
 
