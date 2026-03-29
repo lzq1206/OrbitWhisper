@@ -21,11 +21,20 @@ class SpaceTrackClient:
         "https://www.space-track.org/basicspacedata/query/"
         "class/tle_latest/NORAD_CAT_ID/{norad_id}/ORDINAL/1/format/tle"
     )
+    PUBLIC_FILES_QUERY_URL_TEMPLATE = (
+        "https://www.space-track.org/files/query/"
+        "class/tle_latest/NORAD_CAT_ID/{norad_ids}/ORDINAL/1/FORMAT/tle"
+    )
 
-    def __init__(self, timeout: int = 15) -> None:
+    def __init__(
+        self,
+        timeout: int = 15,
+        username: str | None = None,
+        password: str | None = None,
+    ) -> None:
         load_dotenv()
-        self.username = os.getenv("SPACETRACK_USER")
-        self.password = os.getenv("SPACETRACK_PWD")
+        self.username = username or os.getenv("SPACETRACK_USER") or os.getenv("SPACETRACK_IDENTITY")
+        self.password = password or os.getenv("SPACETRACK_PWD") or os.getenv("SPACETRACK_PASSWORD")
         self.timeout = timeout
         self.session = requests.Session()
         self._is_logged_in = False
@@ -119,3 +128,56 @@ class SpaceTrackClient:
                 continue
             rows.append({"norad_id": norad_id, "line1": line1, "line2": line2})
         return rows
+
+    @staticmethod
+    def _parse_tle_blocks(raw_text: str) -> list[dict[str, Any]]:
+        lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
+        rows: list[dict[str, Any]] = []
+        i = 0
+        while i < len(lines):
+            current = lines[i]
+            if current.startswith("1 ") and i + 1 < len(lines) and lines[i + 1].startswith("2 "):
+                line1, line2 = current, lines[i + 1]
+                i += 2
+            elif (
+                i + 2 < len(lines)
+                and lines[i + 1].startswith("1 ")
+                and lines[i + 2].startswith("2 ")
+            ):
+                line1, line2 = lines[i + 1], lines[i + 2]
+                i += 3
+            else:
+                i += 1
+                continue
+
+            norad_id = None
+            # Per standard TLE format, catalog number is in columns 3-7 (1-based).
+            norad_raw = line1[2:7].strip()
+            line1_has_catalog = norad_raw.isdigit()
+            line2_norad_raw = line2[2:7].strip()
+            line2_has_catalog = line2_norad_raw.isdigit()
+
+            if line1_has_catalog:
+                norad_id = int(norad_raw)
+            if line1_has_catalog and line2_has_catalog and norad_raw != line2_norad_raw:
+                continue
+            rows.append({"norad_id": norad_id, "line1": line1, "line2": line2})
+        return rows
+
+    def get_public_file_tles_by_ids(self, norad_ids: list[int]) -> list[dict[str, Any]]:
+        """Fetch latest TLEs from Space-Track public files endpoint."""
+        self._login()
+        if not norad_ids:
+            return []
+
+        id_str = ",".join(str(int(norad_id)) for norad_id in norad_ids)
+        query_url = self.PUBLIC_FILES_QUERY_URL_TEMPLATE.format(norad_ids=id_str)
+        logger.info("Fetching public-file TLEs for %d NORAD IDs", len(norad_ids))
+        try:
+            response = self.session.get(query_url, timeout=self.timeout)
+            response.raise_for_status()
+        except requests.RequestException as exc:
+            logger.exception("Failed retrieving public-file TLEs")
+            raise RuntimeError("Space-Track public-files query failed") from exc
+
+        return self._parse_tle_blocks(response.text)
