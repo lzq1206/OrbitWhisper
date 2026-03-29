@@ -92,6 +92,13 @@ class TestSpaceTrackClientParser(unittest.TestCase):
             ),
             [],
         )
+        self.assertEqual(
+            SpaceTrackClient._parse_tle_blocks(
+                "ISS (ZARYA)\n"
+                "1 25544U 98067A   24068.52754500  .00020000  00000-0  29677-4 0  9994\n"
+            ),
+            [],
+        )
 
     def test_get_public_file_tles_by_ids_raises_runtimeerror_on_http_failure(self):
         client = SpaceTrackClient.__new__(SpaceTrackClient)

@@ -33,8 +33,8 @@ class SpaceTrackClient:
         password: str | None = None,
     ) -> None:
         load_dotenv()
-        self.username = username or os.getenv("SPACETRACK_USER")
-        self.password = password or os.getenv("SPACETRACK_PWD")
+        self.username = username or os.getenv("SPACETRACK_USER") or os.getenv("SPACETRACK_IDENTITY")
+        self.password = password or os.getenv("SPACETRACK_PWD") or os.getenv("SPACETRACK_PASSWORD")
         self.timeout = timeout
         self.session = requests.Session()
         self._is_logged_in = False
