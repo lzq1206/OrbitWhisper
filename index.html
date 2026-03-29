@@ -38,8 +38,18 @@
       background: rgba(6, 14, 27, 0.82); border: 1px solid rgba(88, 166, 255, 0.45); border-radius: 8px; padding: 10px;
     }
     #survivalChart { width: 100%; height: 100%; }
+    #windowControls {
+      position: absolute; top: 20px; right: 20px; z-index: 20;
+      display: flex; gap: 8px;
+    }
+    .windowToggleBtn {
+      border: 1px solid #58a6ff; border-radius: 6px; padding: 6px 10px;
+      background: rgba(6, 18, 35, 0.82); color: #d6fbff; cursor: pointer;
+      font-family: Arial, sans-serif;
+    }
+    .windowToggleBtn.inactive { opacity: 0.6; }
     #namingModal {
-      display: none; position: absolute; inset: 0; z-index: 30; background: rgba(0, 0, 0, 0.6);
+      display: none; position: fixed; inset: 0; z-index: 30; background: rgba(0, 0, 0, 0.6);
       align-items: center; justify-content: center; font-family: Arial, sans-serif;
     }
     #namingModal .content { width: 360px; background: #031623; border: 1px solid #58a6ff; border-radius: 8px; padding: 16px; color: #d6fbff; }
@@ -76,6 +86,12 @@
     <div id="survivalChart"></div>
   </div>
 
+  <div id="windowControls">
+    <button class="windowToggleBtn" data-target="hud">隐藏风险终端</button>
+    <button class="windowToggleBtn" data-target="controlPanel">隐藏定轨控制台</button>
+    <button class="windowToggleBtn" data-target="chartPanel">隐藏生存曲线</button>
+  </div>
+
   <div id="namingModal">
     <div class="content">
       <div id="modalMessage">发现未知目标，系统建议命名为 Astro-X1</div>
@@ -87,17 +103,62 @@
 
   <script src="./app.js"></script>
   <script>
-    const API_BASE = '';
+    const API_BASE_HINT = (window.ORBITWHISPER_API_BASE || '').trim().replace(/\/$/, '');
     const searchInput = document.getElementById('searchInput');
     const searchResults = document.getElementById('searchResults');
     const statusText = document.getElementById('statusText');
     const hints = document.getElementById('satelliteHints');
     const panelBody = document.getElementById('panelBody');
     const panelToggle = document.getElementById('panelToggle');
+    const hud = document.getElementById('hud');
+    const controlPanel = document.getElementById('controlPanel');
+    const chartPanel = document.getElementById('chartPanel');
     const namingModal = document.getElementById('namingModal');
     const namingInput = document.getElementById('namingInput');
     const modalMessage = document.getElementById('modalMessage');
+    const windowToggleButtons = Array.from(document.querySelectorAll('.windowToggleBtn'));
     let pendingTempId = '';
+
+    function getApiBases() {
+      const localBase = `${window.location.protocol}//${window.location.hostname}:8000`;
+      return [API_BASE_HINT, '', localBase, 'http://127.0.0.1:8000', 'http://localhost:8000']
+        .filter((base, index, arr) => base !== undefined && arr.indexOf(base) === index);
+    }
+
+    async function apiFetch(path, options = {}) {
+      const bases = getApiBases();
+      let lastError = null;
+      for (const base of bases) {
+        try {
+          const resp = await fetch(`${base}${path}`, options);
+          if (!resp.ok && (resp.status === 404 || resp.status === 405 || resp.status === 501)) {
+            continue;
+          }
+          return resp;
+        } catch (err) {
+          lastError = err;
+        }
+      }
+      throw lastError || new Error(`请求失败: ${path}`);
+    }
+
+    function updateWindowToggleLabel(btn, target) {
+      const visible = target.style.display !== 'none';
+      const windowName = btn.dataset.target === 'hud'
+        ? '风险终端'
+        : (btn.dataset.target === 'controlPanel' ? '定轨控制台' : '生存曲线');
+      btn.textContent = `${visible ? '隐藏' : '显示'}${windowName}`;
+      btn.classList.toggle('inactive', !visible);
+    }
+
+    function layoutPanels() {
+      if (hud.style.display === 'none') {
+        controlPanel.style.top = '20px';
+        return;
+      }
+      const hudRect = hud.getBoundingClientRect();
+      controlPanel.style.top = `${Math.ceil(hudRect.bottom + 12)}px`;
+    }
 
     function bindDropZone(elementId, onFiles) {
       const zone = document.getElementById(elementId);
@@ -116,7 +177,7 @@
       if (!files.length) return;
       const text = await files[0].text();
       try {
-        const resp = await fetch(`${API_BASE}/api/upload_tle`, {
+        const resp = await apiFetch('/api/upload_tle', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ tle_text: text })
@@ -136,7 +197,7 @@
       files.forEach(file => form.append('files', file));
       form.append('timestamps', JSON.stringify(timestamps));
       try {
-        const resp = await fetch(`${API_BASE}/api/upload_image`, { method: 'POST', body: form });
+        const resp = await apiFetch('/api/upload_image', { method: 'POST', body: form });
         if (!resp.ok) throw new Error('观测图片上传失败');
         const data = await resp.json();
         statusText.textContent = `解算完成：提取目标 ${data.observation_targets.length} 个`;
@@ -159,7 +220,7 @@
       if (!keyword || keyword.length < 2) return;
       let results = [];
       try {
-        const resp = await fetch(`${API_BASE}/api/satellites/search?q=${encodeURIComponent(keyword)}`);
+        const resp = await apiFetch(`/api/satellites/search?q=${encodeURIComponent(keyword)}`);
         if (resp.ok) {
           const data = await resp.json();
           results = data.results || [];
@@ -197,7 +258,7 @@
       const customName = namingInput.value.trim();
       if (!customName || !pendingTempId) return;
       try {
-        await fetch(`${API_BASE}/api/satellites/name`, {
+        await apiFetch('/api/satellites/name', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ temp_id: pendingTempId, custom_name: customName })
@@ -219,6 +280,23 @@
     searchInput.addEventListener('input', () => searchSatellite(searchInput.value.trim()));
     document.getElementById('saveNameBtn').addEventListener('click', saveCustomName);
     document.getElementById('cancelNameBtn').addEventListener('click', () => { namingModal.style.display = 'none'; pendingTempId = ''; });
+    windowToggleButtons.forEach(btn => {
+      const target = document.getElementById(btn.dataset.target);
+      updateWindowToggleLabel(btn, target);
+      btn.addEventListener('click', () => {
+        target.style.display = target.style.display === 'none' ? '' : 'none';
+        updateWindowToggleLabel(btn, target);
+        if (target === hud || target === controlPanel) {
+          layoutPanels();
+        }
+      });
+    });
+    if (window.ResizeObserver) {
+      const observer = new ResizeObserver(() => layoutPanels());
+      observer.observe(hud);
+    }
+    window.addEventListener('resize', layoutPanels);
+    layoutPanels();
     setTimeout(() => {
       const report = window.__orbitwhisperReport;
       if (!report || !Array.isArray(report.orbits)) return;
@@ -227,6 +305,7 @@
         option.value = sat.name || sat.asset_id;
         hints.appendChild(option);
       });
+      layoutPanels();
     }, 600);
   </script>
 </body>
