@@ -123,7 +123,15 @@ def _build_satellite_payload_real(dataset):
             "suggested_premium": 0.0,
         })
 
+        # Identify PRC (Chinese) satellites - check satcat CSV first, then fallback to name patterns
         is_prc = sat.norad_id in prc_ids
+        if not is_prc:
+            name_up = str(sat.name).upper()
+            grp_up = str(sat.group).upper()
+            prc_patterns = ["YAOGAN", "BEIDOU", "GAOFEN", "TIANGONG", "SHENZHOU", "CZ-", "SJ-", "HAIYANG", "FY-", "QUANZHOU"]
+            if any(p in name_up for p in prc_patterns) or "QIANFAN" in grp_up:
+                is_prc = True
+
         orbits.append({
             "asset_id": sat_id,
             "name": sat.name,

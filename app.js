@@ -461,10 +461,10 @@ function showDetailPanel(orbit) {
       insuranceHtml = `
         <div class="separator" style="height:1px; background:#334; margin:10px 0;"></div>
         <div class="detail-subtitle" style="color:#0f8; margin-bottom: 8px;">动态定价精算模型</div>
-        <div class="detail-row"><span class="label">轨道风险</span><span class="value">${Number(orbit.orbit_risk).toExponential(2)}</span></div>
-        <div class="detail-row"><span class="label">规避后碰撞率</span><span class="value">${Number(orbit.pc_after).toExponential(2)}</span></div>
-        <div class="detail-row"><span class="label">动态赔付强度</span><span class="value">${Number(orbit.claim_int).toFixed(4)}</span></div>
-        <div class="detail-row"><span class="label">商业费率</span><span class="value warn-text">${Number(orbit.premium_rate).toFixed(2)} %</span></div>
+        <div class="detail-row"><span class="label">轨道风险</span><span class="value">${Number(orbit.orbit_risk).toFixed(8)}</span></div>
+        <div class="detail-row"><span class="label">规避后碰撞率</span><span class="value">${Number(orbit.pc_after).toFixed(8)}</span></div>
+        <div class="detail-row"><span class="label">动态赔付强度</span><span class="value">${Number(orbit.claim_int).toFixed(6)}</span></div>
+        <div class="detail-row"><span class="label">商业费率</span><span class="value warn-text">${Number(orbit.premium_rate).toFixed(4)} %</span></div>
         <div class="detail-row"><span class="label">当期准备金</span><span class="value">$${Math.round(orbit.reserve).toLocaleString()}</span></div>
       `;
   }
