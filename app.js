@@ -1,13 +1,22 @@
 const EXTERNAL_ORBIT_FEED_POLL_MS = 60000;
+const EXTERNAL_ORBIT_FEED_TIMEOUT_MS = 15000;
+const MIN_ORBIT_PERIOD_SEC = 4800;
+const BASE_ORBIT_PERIOD_SEC = 5600;
+const ORBIT_PERIOD_ALTITUDE_FACTOR = 12;
+const MIN_LAT_SWING_DEG = 2;
+const MAX_LAT_SWING_DEG = 22;
+const LAT_SWING_SCALE = 0.5;
+const LAT_SWING_OFFSET = 6;
+const GOLDEN_ANGLE_DEG = 137.5;
+const DEFAULT_ALLOWED_ORBIT_FEED_HOSTS = ["platform.leolabs.space"];
 
 function normalizeExternalOrbitPayload(payload) {
-  const candidates = Array.isArray(payload)
-    ? payload
-    : payload?.orbits || payload?.satellites || payload?.data || [];
+  const nestedCandidates = payload?.orbits ?? payload?.orbit ?? payload?.satellites ?? payload?.data;
+  const candidates = Array.isArray(payload) ? payload : nestedCandidates;
   if (!Array.isArray(candidates)) return [];
   return candidates
     .map((item, index) => {
-      const assetId = String(item?.asset_id || item?.id || item?.norad_id || item?.name || "").trim();
+      const assetId = String(item?.asset_id || item?.id || item?.norad_id || "").trim();
       const name = String(item?.name || assetId || `EXT-${index + 1}`).trim();
       const lat = Number(item?.lat ?? item?.latitude ?? item?.position?.lat ?? item?.position?.latitude);
       const lng = Number(item?.lng ?? item?.lon ?? item?.longitude ?? item?.position?.lng ?? item?.position?.lon ?? item?.position?.longitude);
@@ -27,6 +36,11 @@ function getExternalOrbitFeedUrl() {
   try {
     const parsed = new URL(configured, window.location.href);
     if (!["http:", "https:"].includes(parsed.protocol)) return "";
+    const configuredHosts = Array.isArray(window.ORBITWHISPER_ALLOWED_ORBIT_FEED_HOSTS)
+      ? window.ORBITWHISPER_ALLOWED_ORBIT_FEED_HOSTS
+      : DEFAULT_ALLOWED_ORBIT_FEED_HOSTS;
+    const allowedHosts = new Set([window.location.hostname, ...configuredHosts].map((h) => String(h || "").toLowerCase()).filter(Boolean));
+    if (!allowedHosts.has(parsed.hostname.toLowerCase())) return "";
     return parsed.href;
   } catch (_) {
     return "";
@@ -35,8 +49,10 @@ function getExternalOrbitFeedUrl() {
 
 async function fetchExternalOrbitFeed(url) {
   if (!url) return [];
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), EXTERNAL_ORBIT_FEED_TIMEOUT_MS);
   try {
-    const payload = await fetch(url, { cache: "no-store" }).then((r) => {
+    const payload = await fetch(url, { cache: "no-store", signal: controller.signal }).then((r) => {
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       return r.json();
     });
@@ -44,6 +60,8 @@ async function fetchExternalOrbitFeed(url) {
   } catch (err) {
     console.debug("OrbitWhisper external orbit feed unavailable:", err);
     return [];
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
@@ -83,7 +101,7 @@ async function fetchExternalOrbitFeed(url) {
     Cesium.Ion.defaultAccessToken = window.CESIUM_ACCESS_TOKEN || fallbackToken;
     const safeAltitudeMeters = (altKm) => {
       const alt = Number(altKm);
-      if (!Number.isFinite(alt)) return 550000; // 默认 550km，近似低轨高度，避免无效数据导致实体消失
+      if (!Number.isFinite(alt)) return 550000; // Default to 550 km LEO altitude when data is invalid.
       return Math.max(alt, 0) * 1000;
     };
     const viewer = new Cesium.Viewer("cesiumContainer", {
@@ -101,6 +119,7 @@ async function fetchExternalOrbitFeed(url) {
     const entityMap = {};
     const orbitStateMap = {};
     const orbitMap = {};
+    let nextOrbitPhaseIndex = 0;
     const DEFAULT_SATELLITE_RADIUS = 0.5;
     const DEFAULT_SATELLITE_COLOR = "#00ffcc";
     const MIN_SATELLITE_RADIUS = 0.1;
@@ -114,20 +133,28 @@ async function fetchExternalOrbitFeed(url) {
         },
       ]),
     );
-    const ELLIPSOID_SCALE_METERS = 4000; // 经验缩放：将 0.5~0.8 的业务半径映射为约 2~3.2km，可在地球场景稳定可见
+    const ELLIPSOID_SCALE_METERS = 4000; // Visual scaling: map 0.5~0.8 business radius to ~2~3.2 km.
     const wrapLongitude = (value) => ((((value + 180) % 360) + 360) % 360) - 180;
     const clampLatitude = (value) => Math.max(-85, Math.min(85, value));
-    const dynamicPositionForState = (state, time, result) => {
+    const calculateSatellitePosition = (state, time, result) => {
       const currentOrbit = state.orbit;
-      const periodSec = Math.max(4800, 5600 + Number(currentOrbit.alt || 0) * 12);
+      // Empirical period (sec): typical LEO is ~80-110 min, linearly stretched by altitude.
+      const periodSec = Math.max(
+        MIN_ORBIT_PERIOD_SEC,
+        BASE_ORBIT_PERIOD_SEC + Number(currentOrbit.alt || 0) * ORBIT_PERIOD_ALTITUDE_FACTOR,
+      );
       const elapsedSec = Cesium.JulianDate.secondsDifference(time, state.startTime);
       const phase = ((state.phaseDeg + (elapsedSec * 360) / periodSec) % 360) * (Math.PI / 180);
-      const latSwing = Math.max(2, Math.min(22, Math.abs(Number(currentOrbit.lat || 0)) * 0.5 + 6));
+      // Keep latitude oscillation in a stable 2-22° range to avoid polar jitter.
+      const latSwing = Math.max(
+        MIN_LAT_SWING_DEG,
+        Math.min(MAX_LAT_SWING_DEG, Math.abs(Number(currentOrbit.lat || 0)) * LAT_SWING_SCALE + LAT_SWING_OFFSET),
+      );
       const dynamicLat = clampLatitude(Number(currentOrbit.lat || 0) + Math.sin(phase) * latSwing);
       const dynamicLng = wrapLongitude(Number(currentOrbit.lng || 0) + (elapsedSec * 360) / periodSec);
       return Cesium.Cartesian3.fromDegrees(dynamicLng, dynamicLat, safeAltitudeMeters(currentOrbit.alt), Cesium.Ellipsoid.WGS84, result);
     };
-    const upsertOrbit = (orbit, index = 0) => {
+    const upsertSatelliteEntity = (orbit) => {
       const key = String(orbit.asset_id || "").toLowerCase();
       if (!key) return;
       const satStyle = satelliteStyles[orbit.asset_id] || {
@@ -140,13 +167,15 @@ async function fetchExternalOrbitFeed(url) {
       if (!orbitStateMap[key]) {
         orbitStateMap[key] = {
           orbit,
-          phaseDeg: (index * 137.5) % 360,
+          // Golden-angle spacing (~137.5°) reduces initial visual clustering.
+          phaseDeg: (nextOrbitPhaseIndex * GOLDEN_ANGLE_DEG) % 360,
           startTime: Cesium.JulianDate.now(),
         };
+        nextOrbitPhaseIndex += 1;
         const entity = viewer.entities.add({
           id: orbit.asset_id,
           name: orbit.name,
-          position: new Cesium.CallbackProperty((time, result) => dynamicPositionForState(orbitStateMap[key], time, result), false),
+          position: new Cesium.CallbackProperty((time, result) => calculateSatellitePosition(orbitStateMap[key], time, result), false),
           point: { pixelSize: 9, color: Cesium.Color.CYAN },
           ellipsoid: {
             radii: new Cesium.Cartesian3(radius, radius, radius),
@@ -170,18 +199,19 @@ async function fetchExternalOrbitFeed(url) {
         }
       }
     };
-    report.orbits.forEach((orbit, index) => upsertOrbit(orbit, index));
+    report.orbits.forEach((orbit) => upsertSatelliteEntity(orbit));
     window.focusSatellite = function focusSatellite(keyword) {
       const key = String(keyword || "").trim().toLowerCase();
       if (!key) return false;
+      const orbit = orbitMap[key];
+      if (!orbit) return false;
       const entity = entityMap[key];
       if (entity) {
         viewer.trackedEntity = entity;
         viewer.flyTo(entity, { duration: 1.2 });
         return true;
       }
-      const orbit = orbitMap[key];
-      if (!orbit) return false;
+      // Fallback path when entity isn't available yet (for example, while feed is loading).
       viewer.camera.flyTo({
         destination: Cesium.Cartesian3.fromDegrees(orbit.lng, orbit.lat, safeAltitudeMeters(orbit.alt) + 600000),
         duration: 1.2,
@@ -194,7 +224,7 @@ async function fetchExternalOrbitFeed(url) {
       if (!externalOrbitFeedUrl) return false;
       const externalOrbits = await fetchExternalOrbitFeed(externalOrbitFeedUrl);
       if (!externalOrbits.length) return false;
-      externalOrbits.forEach((orbit, index) => upsertOrbit(orbit, index));
+      externalOrbits.forEach((orbit) => upsertSatelliteEntity(orbit));
       return true;
     }
     window.__orbitwhisperRefreshExternalOrbitFeed = refreshExternalOrbitFeed;

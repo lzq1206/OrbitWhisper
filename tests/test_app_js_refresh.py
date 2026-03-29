@@ -30,7 +30,15 @@ class TestAppJsRefresh(unittest.TestCase):
         )
         self.assertRegex(
             source,
+            re.compile(r"const\s+EXTERNAL_ORBIT_FEED_TIMEOUT_MS\s*=\s*15000\s*;"),
+        )
+        self.assertRegex(
+            source,
             re.compile(r"function\s+normalizeExternalOrbitPayload\s*\("),
+        )
+        self.assertRegex(
+            source,
+            re.compile(r"DEFAULT_ALLOWED_ORBIT_FEED_HOSTS"),
         )
         self.assertRegex(
             source,
