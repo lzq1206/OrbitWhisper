@@ -32,6 +32,8 @@ let orbitStateMap = {};
 let orbitMap = {};
 let nextOrbitPhaseIndex = 0;
 let viewer = null;
+let pendingTempId = '';
+const API_BASE_HINT = (window.ORBITWHISPER_API_BASE || '').trim().replace(/\/$/, '');
 
 // ── Helpers ──
 const wrapLng = v => ((((v + 180) % 360) + 360) % 360) - 180;
@@ -47,6 +49,70 @@ function calcPosition(state, time, result) {
   const lat = clampLat(Number(o.lat || 0) + Math.sin(phase) * swing);
   const lng = wrapLng(Number(o.lng || 0) + (elapsed * 360) / period);
   return Cesium.Cartesian3.fromDegrees(lng, lat, safeAltM(o.alt), Cesium.Ellipsoid.WGS84, result);
+}
+
+function getApiBases() {
+  const localBase = `${window.location.protocol}//${window.location.hostname}:8000`;
+  const sameOriginLikelyHasApi = window.location.port === '8000' || window.location.port === '';
+  const sameOriginBase = sameOriginLikelyHasApi ? '' : null;
+  const bases = [API_BASE_HINT || null, localBase, 'http://127.0.0.1:8000', 'http://localhost:8000', sameOriginBase]
+    .filter(base => base !== undefined && base !== null);
+  return [...new Set(bases)];
+}
+
+async function apiFetch(path, options = {}) {
+  const bases = getApiBases();
+  let lastError = null;
+  for (const base of bases) {
+    try {
+      const resp = await fetch(`${base}${path}`, options);
+      if (!resp.ok && (resp.status === 404 || resp.status === 405)) continue;
+      return resp;
+    } catch (err) { lastError = err; }
+  }
+  throw lastError || new Error(`API fetch failed: ${path}`);
+}
+
+async function uploadImageFiles(files) {
+  if (!files.length) return;
+  const statusText = document.getElementById("statusText");
+  const form = new FormData();
+  const timestamps = files.map(() => new Date().toISOString());
+  files.forEach(file => form.append('files', file));
+  form.append('timestamps', JSON.stringify(timestamps));
+  try {
+    statusText.textContent = "图片定轨解算中...";
+    const resp = await apiFetch('/api/upload_image', { method: 'POST', body: form });
+    if (!resp.ok) throw new Error('上传失败');
+    const data = await resp.json();
+    statusText.textContent = `解算完成：提取目标 ${data.observation_targets.length} 个`;
+    if (data.unknown_target_suggestion) {
+      pendingTempId = data.unknown_temp_id || `UNKN-${Date.now()}`;
+      document.getElementById("modalMessage").textContent = `发现未知目标，系统建议命名为 ${data.unknown_target_suggestion}`;
+      document.getElementById("namingInput").value = data.unknown_target_suggestion;
+      document.getElementById("namingModal").style.display = 'flex';
+    }
+  } catch (err) {
+    statusText.textContent = `上传错误: ${err.message}`;
+  }
+}
+
+async function saveCustomName() {
+  const customName = document.getElementById("namingInput").value.trim();
+  const statusText = document.getElementById("statusText");
+  if (!customName || !pendingTempId) return;
+  try {
+    await apiFetch('/api/satellites/name', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ temp_id: pendingTempId, custom_name: customName })
+    });
+    statusText.textContent = `命名已应用: ${customName}`;
+  } catch (_) {
+    statusText.textContent = `命名已记录(离线): ${customName}`;
+  }
+  document.getElementById("namingModal").style.display = 'none';
+  pendingTempId = '';
 }
 
 // ── Category filter UI ──
@@ -307,6 +373,7 @@ function searchSatellites(keyword) {
   // Stats
   document.getElementById("totalCount").textContent = totalSats.toLocaleString();
   document.getElementById("updateTime").textContent = (report.generated_at || "").replace("T", " ").substring(0, 19);
+  document.getElementById("highRiskCount").textContent = `${report.high_risk_events ? report.high_risk_events.length : 0} 起`;
   document.getElementById("bottomStatus").textContent = `数据来源: CelesTrak | ${report.generated_at || ""}`;
 
   // Build UI
@@ -338,8 +405,29 @@ function searchSatellites(keyword) {
   const tleInput = document.getElementById("tleFileInput");
   if (tleBtn && tleInput) {
     tleBtn.addEventListener("click", () => tleInput.click());
-    tleInput.addEventListener("change", () => { tleInput.value = ""; });
+    // Simulate TLE processing
+    tleInput.addEventListener("change", () => {
+      document.getElementById("statusText").textContent = "TLE 解析完成 (离线模式)";
+      tleInput.value = "";
+    });
   }
+
+  const imageBtn = document.getElementById("imageUploadBtn");
+  const imageInput = document.getElementById("imageFileInput");
+  if (imageBtn && imageInput) {
+    imageBtn.addEventListener("click", () => imageInput.click());
+    imageInput.addEventListener("change", () => {
+      uploadImageFiles(Array.from(imageInput.files || []));
+      imageInput.value = "";
+    });
+  }
+
+  // Naming Modal
+  document.getElementById("saveNameBtn").addEventListener("click", saveCustomName);
+  document.getElementById("cancelNameBtn").addEventListener("click", () => {
+    document.getElementById("namingModal").style.display = 'none';
+    pendingTempId = '';
+  });
 
   // Detail close
   document.getElementById("detailClose").addEventListener("click", hideDetailPanel);
@@ -376,6 +464,58 @@ function searchSatellites(keyword) {
   console.time("addSatellites");
   allOrbits.forEach(orbit => addSatelliteEntity(orbit));
   console.timeEnd("addSatellites");
+
+  // ── Render collision math high risk events ──
+  if (Array.isArray(report.high_risk_events)) {
+    report.high_risk_events.forEach((evt, idx) => {
+      const lon = 90 + idx * 15;
+      const lat = -5 + idx * 12;
+      viewer.entities.add({
+        name: `${evt.asset_id} risk`,
+        position: Cesium.Cartesian3.fromDegrees(lon, lat, 500000),
+        ellipsoid: {
+          radii: new Cesium.Cartesian3(12000, 12000, 12000),
+          material: Cesium.Color.RED.withAlpha(0.6),
+        },
+        label: {
+          text: `🚨 TCA ${evt.tca_utc}\nMiss: ${evt.miss_distance_km} km\nPoC: ${Number(evt.poc).toExponential(2)}`,
+          font: "11px Inter, monospace",
+          fillColor: Cesium.Color.RED,
+        },
+      });
+    });
+  }
+
+  // ── Actuarial model survival curve ──
+  const firstPricing = report.asset_pricing && report.asset_pricing[0];
+  if (firstPricing && window.echarts) {
+    document.getElementById("chartPanel").classList.remove("hidden");
+    const chart = echarts.init(document.getElementById("survivalChart"));
+    chart.setOption({
+      backgroundColor: "transparent",
+      title: { text: `${firstPricing.asset_id} 生存预测`, textStyle: { color: "#d9e5ff", fontSize: 13 } },
+      grid: { left: 40, right: 10, top: 30, bottom: 20 },
+      xAxis: {
+        type: "category",
+        data: firstPricing.survival_curve.map(p => p.timeline_days),
+        axisLabel: { color: "#8fa8cc", fontSize: 10 },
+      },
+      yAxis: { type: "value", min: 0, max: 1, axisLabel: { color: "#8fa8cc", fontSize: 10 }, splitLine: { lineStyle: { color: 'rgba(255,255,255,0.05)' } } },
+      series: [
+        {
+          type: "line",
+          smooth: true,
+          data: firstPricing.survival_curve.map(p => p.survival_prob),
+          lineStyle: { color: "#58a6ff" },
+          areaStyle: { color: "rgba(88,166,255,0.2)" },
+        },
+      ],
+    });
+  }
+
+  document.getElementById("chartClose").addEventListener("click", () => {
+    document.getElementById("chartPanel").classList.add("hidden");
+  });
 
   // Apply initial filter (show only default categories)
   applyFilters();

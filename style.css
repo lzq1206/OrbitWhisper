@@ -209,6 +209,7 @@ html, body {
 
 .stat-row span:first-child { color: var(--text-secondary); }
 .stat-row span:last-child { color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.warn-text { color: var(--danger) !important; font-weight: 600; }
 
 /* Upload */
 .upload-btn {
@@ -340,6 +341,82 @@ html, body {
 .detail-row:last-child { border-bottom: none; }
 .detail-row .label { color: var(--text-secondary); }
 .detail-row .value { color: var(--text-primary); font-variant-numeric: tabular-nums; text-align: right; }
+
+/* ── Chart Panel ── */
+#chartPanel {
+  position: absolute; bottom: 44px; right: 16px;
+  z-index: 15;
+  width: 420px;
+  height: 280px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-accent);
+  border-radius: 8px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  display: flex; flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+#chartPanel.hidden { display: none; }
+
+.chart-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 13px; font-weight: 600;
+}
+
+#survivalChart {
+  flex: 1; min-height: 0; padding: 10px;
+}
+
+/* ── Naming Modal ── */
+#namingModal {
+  display: none; position: fixed; inset: 0; z-index: 50;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  align-items: center; justify-content: center;
+}
+
+.modal-content {
+  width: 380px;
+  background: var(--bg-sidebar);
+  border: 1px solid var(--border-accent);
+  border-radius: 10px; padding: 20px;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6);
+  color: var(--text-primary);
+}
+
+#modalMessage { margin-bottom: 16px; font-size: 13px; line-height: 1.5; color: var(--text-secondary); }
+
+#namingInput {
+  width: 100%; padding: 10px 12px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 14px; margin-bottom: 20px;
+  outline: none; transition: border-color 0.2s;
+}
+
+#namingInput:focus { border-color: var(--accent); }
+
+.modal-actions {
+  display: flex; gap: 12px;
+}
+
+.modal-actions .action-btn {
+  flex: 1; padding: 10px 0; font-size: 13px; font-weight: 500;
+}
+
+.modal-actions .action-btn:first-child {
+  background: var(--accent); color: #fff; border-color: var(--accent);
+}
+
+.modal-actions .action-btn:first-child:hover {
+  background: #3b8ce0;
+}
 
 /* ── Cesium overrides ── */
 .cesium-viewer-bottom { display: none !important; }

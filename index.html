@@ -7,6 +7,7 @@
   <title>OrbitWhisper | 3D 在轨资产可视化终端</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.0/echarts.min.js" integrity="sha384-o5uz97et3bErHvpKfD4Jz4n0JfhJDWABFuF4NP+iEEDxE1VwMWJ19QGR0lqFZnr6" crossorigin="anonymous"></script>
   <script src="https://cesium.com/downloads/cesiumjs/releases/1.120/Build/Cesium/Cesium.js" integrity="sha384-u6lI9nKeZ0sgcSQty6qC4XQHU/ZG7JJ8PfRvtUQTH83OstsiEivIu3F9k012EB3W" crossorigin="anonymous"></script>
   <link href="https://cesium.com/downloads/cesiumjs/releases/1.120/Build/Cesium/Widgets/widgets.css" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
@@ -43,6 +44,7 @@
       <div id="statsPanel">
         <div class="stat-row"><span>数据库总量</span><span id="totalCount">-</span></div>
         <div class="stat-row"><span>当前显示</span><span id="visibleCount">-</span></div>
+        <div class="stat-row"><span>高危交会预警</span><span id="highRiskCount" class="warn-text">0 起</span></div>
         <div class="stat-row"><span>更新时间</span><span id="updateTime">-</span></div>
       </div>
     </div>
@@ -55,6 +57,8 @@
       <div id="uploadBody" class="collapsed">
         <button id="tleUploadBtn" class="upload-btn">上传 TLE 文件</button>
         <input id="tleFileInput" type="file" accept=".tle,.txt,text/plain" style="display:none;" />
+        <button id="imageUploadBtn" class="upload-btn">上传观测图片</button>
+        <input id="imageFileInput" type="file" accept="image/*" multiple style="display:none;" />
         <div id="statusText" class="status-text"></div>
       </div>
     </div>
@@ -83,6 +87,27 @@
       <button id="detailClose" class="close-btn">✕</button>
     </div>
     <div id="detailBody"></div>
+  </div>
+
+  <!-- ── Survival Chart Panel ── -->
+  <div id="chartPanel" class="hidden">
+    <div class="chart-header">
+      <span id="chartTitle">资产降落/衰减曲线</span>
+      <button id="chartClose" class="close-btn">✕</button>
+    </div>
+    <div id="survivalChart"></div>
+  </div>
+
+  <!-- ── Naming Modal ── -->
+  <div id="namingModal">
+    <div class="modal-content">
+      <div id="modalMessage">发现未知目标，系统建议命名为 Astro-X1</div>
+      <input id="namingInput" type="text" placeholder="输入自定义名称..." />
+      <div class="modal-actions">
+        <button id="saveNameBtn" class="action-btn">保存命名</button>
+        <button id="cancelNameBtn" class="action-btn">取消</button>
+      </div>
+    </div>
   </div>
 
   <script src="./app.js"></script>
