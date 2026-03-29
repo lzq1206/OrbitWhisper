@@ -92,6 +92,23 @@ python -m http.server 8000
 # 打开 http://localhost:8000/
 ```
 
+### Frontend realtime orbit mode (optional)
+
+- The frontend now uses Cesium `CallbackProperty` for continuous orbit animation, so satellites move without page reload.
+- To connect an external orbit endpoint (for example, a LeoLabs-style JSON feed), add this URL parameter:
+
+```text
+http://localhost:8000/?orbitFeedUrl=https://your-orbit-api.example/path
+```
+
+- For security, only same-origin hosts and `platform.leolabs.space` are allowed by default. To allow more hosts, set:
+  - `window.ORBITWHISPER_ALLOWED_ORBIT_FEED_HOSTS = ["host-a", "host-b"]`
+
+- Supported response shapes:
+  - Top-level array: `[{ asset_id|id|name, lat|latitude, lng|lon|longitude, alt|alt_km|altitude }]`
+  - Wrapped arrays: `{ orbits: [...] }` / `{ satellites: [...] }` / `{ data: [...] }`
+- Poll interval is 60 seconds with a 15-second request timeout. If the external feed fails, the UI keeps showing currently loaded local/last-good orbit data.
+
 4. 运行测试
 ```bash
 python -m unittest discover tests
