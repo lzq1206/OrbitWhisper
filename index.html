@@ -17,6 +17,7 @@
   <div id="cesiumContainer"></div>
 
   <!-- ── Left Sidebar ── -->
+  <button id="sidebarToggle" class="panel-toggle side-toggle" title="展开/收起侧边栏">◀</button>
   <div id="sidebar">
     <div class="sidebar-header">
       <h1>OrbitWhisper</h1>
@@ -34,9 +35,15 @@
       <div class="section-title">卫星分类筛选</div>
       <div id="categoryFilters"></div>
       <div class="filter-actions" style="margin-top: 8px;">
-        <label style="display: flex; align-items: center; cursor: pointer; color: #ff4757; font-weight: 600;">
+        <label style="display: flex; align-items: center; cursor: pointer; color: #ff4757; font-size: 13px; font-weight: normal;">
           <input type="checkbox" id="prcOnlyToggle" style="margin-right: 6px;">
           🇨🇳 仅显示中国在轨资产 (PRC)
+        </label>
+      </div>
+      <div class="filter-actions" style="margin-top: 8px;">
+        <label style="display: flex; align-items: center; cursor: pointer; color: #ffab00; font-size: 13px; font-weight: normal;">
+          <input type="checkbox" id="highRiskOnlyToggle" style="margin-right: 6px;">
+          🚨 仅显示高危交会风险目标
         </label>
       </div>
       <div class="filter-actions" style="margin-top: 8px;">
@@ -51,7 +58,7 @@
       <div id="statsPanel">
         <div class="stat-row"><span>数据库总量</span><span id="totalCount">-</span></div>
         <div class="stat-row"><span>当前显示</span><span id="visibleCount">-</span></div>
-        <div class="stat-row"><span>高危交会预警</span><span id="highRiskCount" class="warn-text">0 起</span></div>
+        <div class="stat-row clickable" id="highRiskStats"><span>高危交会预警</span><span id="highRiskCount" class="warn-text" style="text-decoration: underline; cursor: pointer;">0 起</span></div>
         <div class="stat-row"><span>更新时间</span><span id="updateTime">-</span></div>
       </div>
     </div>
@@ -75,12 +82,6 @@
     </div>
   </div>
 
-  <!-- ── Right Legend ── -->
-  <div id="legend">
-    <div class="legend-title">图例</div>
-    <div id="legendItems"></div>
-  </div>
-
   <!-- ── Bottom Status Bar ── -->
   <div id="bottomBar">
     <span id="clockDisplay" style="margin-right: 15px; font-family: monospace; color: #00ffcc;"></span>
@@ -88,22 +89,36 @@
     <span id="bottomCount"></span>
   </div>
 
-  <!-- ── Satellite Detail Panel ── -->
+  <!-- ── Right Sidebar (Detail & Analytics) ── -->
   <div id="detailPanel" class="hidden">
     <div class="detail-header">
-      <span id="detailTitle">卫星详情</span>
+      <span id="detailTitle">卫星详情与精算分析</span>
       <button id="detailClose" class="close-btn">✕</button>
     </div>
-    <div id="detailBody"></div>
+    <div id="detailScroll" class="scroll-list">
+      <div id="detailBody"></div>
+      
+      <div id="pricingModelSection" class="hidden">
+        <div class="separator"></div>
+        <div class="sidebar-section-title">动态定价精算模型</div>
+        <div id="actuarialBody"></div>
+      </div>
+
+      <div id="chartSection" class="hidden">
+        <div class="separator"></div>
+        <div class="sidebar-section-title">资产降落/衰减曲线</div>
+        <div id="survivalChart"></div>
+      </div>
+    </div>
   </div>
 
-  <!-- ── Survival Chart Panel ── -->
-  <div id="chartPanel" class="hidden">
-    <div class="chart-header">
-      <span id="chartTitle">资产降落/衰减曲线</span>
-      <button id="chartClose" class="close-btn">✕</button>
+  <!-- ── Conjunction Events Panel ── -->
+  <div id="conjunctionPanel" class="hidden">
+    <div class="panel-header">
+      <span>🚨 SOCRATES 实时高危交会清单</span>
+      <button id="conjunctionClose" class="close-btn">✕</button>
     </div>
-    <div id="survivalChart"></div>
+    <div id="conjunctionList" class="scroll-list"></div>
   </div>
 
   <!-- ── Naming Modal ── -->

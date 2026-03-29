@@ -13,8 +13,10 @@ const CATEGORY_COLORS = {
 
 // Default visible categories on load
 const DEFAULT_VISIBLE = new Set(["空间站与特殊兴趣", "导航卫星", "科学卫星"]);
-const visibleCategories = new Set();
-const visibleGroups = new Set();
+let visibleCategories = new Set();
+let visibleGroups = new Set();
+let showPrcOnly = false;
+let showHighRiskOnly = false;
 
 // ── Orbit animation constants ──
 const MIN_ORBIT_PERIOD_SEC = 4800;
@@ -301,30 +303,31 @@ function buildCategoryFilters() {
 }
 
 function applyFilters() {
-  let visibleCount = 0;
-  const prcToggle = document.getElementById("prcOnlyToggle");
-  const prcOnly = prcToggle ? prcToggle.checked : false;
+  const countSpan = document.getElementById("visibleCount");
+  let visibleTotal = 0;
 
   allOrbits.forEach(orbit => {
-    const key = String(orbit.asset_id || "").toLowerCase();
+    const key = String(orbit.norad_id || orbit.asset_id).toLowerCase();
     const entity = entityMap[key];
     if (!entity) return;
 
     const cat = orbit.category || "其他";
     const grp = orbit.group || "其它/末知";
-    
+    const isPrc = orbit.is_prc === true;
+    const isHighRisk = orbit.is_high_risk === true;
+
+    // Visibility logic: (Category AND Group) AND (PRC filter) AND (HighRisk filter)
     let shouldShow = visibleCategories.has(cat) && visibleGroups.has(grp);
     
-    if (prcOnly && orbit.is_prc !== true) {
-      shouldShow = false;
-    }
-    
+    if (showPrcOnly && !isPrc) shouldShow = false;
+    if (showHighRiskOnly && !isHighRisk) shouldShow = false;
+
     entity.show = shouldShow;
-    if (shouldShow) visibleCount++;
+    if (shouldShow) visibleTotal++;
   });
 
-  document.getElementById("visibleCount").textContent = visibleCount.toLocaleString();
-  document.getElementById("bottomCount").textContent = `${visibleCount.toLocaleString()} 颗卫星显示中`;
+  if (countSpan) countSpan.textContent = visibleTotal.toLocaleString();
+  document.getElementById("bottomCount").textContent = `${visibleTotal.toLocaleString()} 颗卫星显示中`;
 }
 
 function setAllCategories(checked) {
@@ -345,19 +348,6 @@ function setAllCategories(checked) {
     }
   });
   applyFilters();
-}
-
-// ── Legend ──
-function buildLegend(catStats) {
-  const container = document.getElementById("legendItems");
-  container.innerHTML = "";
-  Object.entries(catStats).sort((a, b) => b[1] - a[1]).forEach(([cat]) => {
-    const color = CATEGORY_COLORS[cat] || "#aaa";
-    const item = document.createElement("div");
-    item.className = "legend-item";
-    item.innerHTML = `<span class="legend-dot" style="background:${color};color:${color}"></span><span>${cat}</span>`;
-    container.appendChild(item);
-  });
 }
 
 // ── Satellite entity management ──
@@ -385,17 +375,17 @@ function addSatelliteEntity(orbit) {
 
     let positionProp;
     let colorProp = cesiumColor;
-    let pixelSize = 4;
+    let pixelSize = 8;
     
     if (orbit.status === "decayed") {
       // Place decayed sats slightly above surface so they're visible above terrain
       positionProp = Cesium.Cartesian3.fromDegrees(Number(orbit.lng || 0), Number(orbit.lat || 0), 50000);
       colorProp = Cesium.Color.RED;
-      pixelSize = 6;
+      pixelSize = 10;
     } else {
       positionProp = new Cesium.CallbackProperty((time, result) => calcPosition(orbitStateMap[key], time, result), false);
       if (orbit.status === "reentering") {
-        pixelSize = 6;
+        pixelSize = 10;
         colorProp = new Cesium.CallbackProperty((time) => {
           const ms = Cesium.JulianDate.toDate(time).getTime();
           return (ms % 600 < 300) ? Cesium.Color.RED : Cesium.Color.RED.withAlpha(0.2);
@@ -408,6 +398,10 @@ function addSatelliteEntity(orbit) {
       name: displayName,
       show: shouldShow,
       position: positionProp,
+      properties: new Cesium.PropertyBag({
+          asset_id: orbit.asset_id,
+          norad_id: orbit.norad_id
+      }),
       point: {
         pixelSize: pixelSize,
         color: colorProp,
@@ -436,39 +430,23 @@ function addSatelliteEntity(orbit) {
 // ── Detail panel ──
 function showDetailPanel(orbit) {
   const panel = document.getElementById("detailPanel");
+  if (!panel) return;
+  
+  panel.classList.remove("hidden");
+  
   const body = document.getElementById("detailBody");
   const title = document.getElementById("detailTitle");
-
-  // Hide legend when detail is shown
-  document.getElementById("legend").style.display = "none";
-
   const name = orbit.name || orbit.asset_id;
-  title.textContent = name;
+  if (title) title.textContent = name;
   
-  // Show survival chart if available
-  const pricing = pricingMap[String(orbit.norad_id || orbit.asset_id)];
-  if (pricing) {
-    showSurvivalChart(pricing);
-  } else {
-    document.getElementById("chartPanel").classList.add("hidden");
-  }
+  // Sections
+  const pricingSection = document.getElementById("pricingModelSection");
+  const actuarialBody = document.getElementById("actuarialBody");
+  const chartSection = document.getElementById("chartSection");
 
+  // Basic Info
   const cat = orbit.category || "其他";
   const color = CATEGORY_COLORS[cat] || "#aaa";
-
-  let insuranceHtml = "";
-  if (orbit.orbit_risk !== undefined && orbit.orbit_risk !== null) {
-      insuranceHtml = `
-        <div class="separator" style="height:1px; background:#334; margin:10px 0;"></div>
-        <div class="detail-subtitle" style="color:#0f8; margin-bottom: 8px;">动态定价精算模型</div>
-        <div class="detail-row"><span class="label">轨道风险</span><span class="value">${Number(orbit.orbit_risk).toFixed(8)}</span></div>
-        <div class="detail-row"><span class="label">规避后碰撞率</span><span class="value">${Number(orbit.pc_after).toFixed(8)}</span></div>
-        <div class="detail-row"><span class="label">动态赔付强度</span><span class="value">${Number(orbit.claim_int).toFixed(6)}</span></div>
-        <div class="detail-row"><span class="label">商业费率</span><span class="value warn-text">${Number(orbit.premium_rate).toFixed(4)} %</span></div>
-        <div class="detail-row"><span class="label">当期准备金</span><span class="value">$${Math.round(orbit.reserve).toLocaleString()}</span></div>
-      `;
-  }
-
   body.innerHTML = `
     <div class="detail-row"><span class="label">NORAD ID</span><span class="value">${orbit.norad_id || orbit.asset_id}</span></div>
     <div class="detail-row"><span class="label">名称</span><span class="value">${name}</span></div>
@@ -476,16 +454,38 @@ function showDetailPanel(orbit) {
     <div class="detail-row"><span class="label">纬度</span><span class="value">${Number(orbit.lat).toFixed(4)}°</span></div>
     <div class="detail-row"><span class="label">经度</span><span class="value">${Number(orbit.lng).toFixed(4)}°</span></div>
     <div class="detail-row"><span class="label">高度</span><span class="value">${Number(orbit.alt).toFixed(1)} km</span></div>
-    ${insuranceHtml}
   `;
 
-  panel.classList.remove("hidden");
+  // Actuarial Section
+  if (orbit.orbit_risk !== undefined && orbit.orbit_risk !== null) {
+      pricingSection.classList.remove("hidden");
+      actuarialBody.innerHTML = `
+        <div class="detail-row"><span class="label">轨道风险</span><span class="value">${Number(orbit.orbit_risk).toFixed(8)}</span></div>
+        <div class="detail-row"><span class="label">规避后碰撞率</span><span class="value">${Number(orbit.pc_after).toFixed(8)}</span></div>
+        <div class="detail-row"><span class="label">动态赔付强度</span><span class="value">${Number(orbit.claim_int).toFixed(6)}</span></div>
+        <div class="detail-row"><span class="label">商业费率</span><span class="value warn-text">${Number(orbit.premium_rate).toFixed(4)} %</span></div>
+        <div class="detail-row"><span class="label">当期准备金</span><span class="value">$${Math.round(orbit.reserve).toLocaleString()}</span></div>
+      `;
+  } else {
+      pricingSection.classList.add("hidden");
+  }
+
+  // Chart Section
+  const pricing = pricingMap[String(orbit.norad_id || orbit.asset_id)];
+  if (pricing && pricing.survival_curve) {
+    chartSection.classList.remove("hidden");
+    showSurvivalChart(pricing);
+  } else {
+    chartSection.classList.add("hidden");
+  }
 }
 
 function hideDetailPanel() {
-  document.getElementById("detailPanel").classList.add("hidden");
-  document.getElementById("legend").style.display = "";
-  if (viewer) viewer.trackedEntity = undefined;
+    const panel = document.getElementById("detailPanel");
+    const toggle = document.getElementById("detailToggle");
+    if (panel) panel.classList.add("hidden");
+    if (toggle) toggle.classList.add("hidden");
+    if (viewer) viewer.trackedEntity = undefined;
 }
 
 // ── Search ──
@@ -563,16 +563,38 @@ function searchSatellites(keyword) {
   document.getElementById("highRiskCount").textContent = `${report.high_risk_events ? report.high_risk_events.length : 0} 起`;
   document.getElementById("bottomStatus").textContent = `数据来源: CelesTrak | ${report.generated_at || ""}`;
 
+  // Filter actions
+  document.getElementById("prcOnlyToggle").addEventListener("change", e => {
+    showPrcOnly = e.target.checked;
+    applyFilters();
+  });
+  
+  document.getElementById("highRiskOnlyToggle").addEventListener("change", e => {
+      showHighRiskOnly = e.target.checked;
+      applyFilters();
+  });
+
   // Build UI
   buildCategoryFilters(catStats);
-  buildLegend(catStats);
 
   // Buttons
   document.getElementById("selectAllBtn").addEventListener("click", () => setAllCategories(true));
   document.getElementById("deselectAllBtn").addEventListener("click", () => setAllCategories(false));
 
-  // Search
-  document.getElementById("searchInput").addEventListener("input", e => searchSatellites(e.target.value.trim()));
+  // Stats - High Risk click
+  document.getElementById("highRiskStats").addEventListener("click", () => renderConjunctionList());
+  document.getElementById("conjunctionClose").addEventListener("click", () => {
+    document.getElementById("conjunctionPanel").classList.add("hidden");
+  });
+
+  // Panel Toggles
+  initPanelToggles();
+
+  // Search listener
+  const searchInput = document.getElementById("searchInput");
+  if (searchInput) {
+    searchInput.addEventListener("input", e => searchSatellites(e.target.value));
+  }
 
   // Collapsible sections
   document.querySelectorAll(".section-title.clickable").forEach(title => {
@@ -580,7 +602,7 @@ function searchSatellites(keyword) {
       const targetId = title.dataset.toggle;
       const target = document.getElementById(targetId);
       if (target) {
-        target.classList.toggle("collapsed");
+        target.classList.toggle("collapsed-content");
         const icon = title.querySelector(".toggle-icon");
         if (icon) icon.classList.toggle("open");
       }
@@ -643,18 +665,52 @@ function searchSatellites(keyword) {
   });
 
   window.__orbitwhisperViewer = viewer;
+
+  // ── Click to select satellite (Restored & Enhanced native selection) ──
+  viewer.selectedEntityChanged.addEventListener(entity => {
+      console.info("Selection changed:", entity ? entity.id : "none");
+      if (!entity) {
+          hideDetailPanel();
+          return;
+      }
+      
+      // Multi-layer lookup: Properties -> ID -> allOrbits search
+      let orbit = null;
+      if (entity.properties) {
+          const aid = entity.properties.asset_id?.getValue();
+          if (aid) orbit = orbitMap[String(aid).toLowerCase()];
+      }
+      
+      if (!orbit) {
+          const key = String(entity.id || "").toLowerCase();
+          orbit = orbitMap[key];
+      }
+      
+      if (!orbit) {
+          const idStr = String(entity.id);
+          orbit = allOrbits.find(o => String(o.asset_id) === idStr || String(o.norad_id) === idStr);
+      }
+      
+      if (orbit) {
+          console.info("Triggering detail panel for:", orbit.name || orbit.asset_id);
+          showDetailPanel(orbit);
+      } else {
+          console.warn("Could not resolve orbit data for entity:", entity.id);
+      }
+  });
   viewer.scene.globe.enableLighting = true;
   viewer.scene.backgroundColor = Cesium.Color.fromCssColorString("#0a0e17");
   viewer.scene.screenSpaceCameraController.minimumZoomDistance = 500000;
 
   window.showSurvivalChart = function(pricing) {
     if (!window.echarts) return;
-    document.getElementById("chartPanel").classList.remove("hidden");
-    const chart = echarts.init(document.getElementById("survivalChart"));
+    const chartDom = document.getElementById("survivalChart");
+    if (!chartDom) return;
+    const chart = echarts.getInstanceByDom(chartDom) || echarts.init(chartDom);
     chart.setOption({
       backgroundColor: "transparent",
-      title: { text: `${pricing.name || pricing.asset_id} 生存曲线预测`, textStyle: { color: "#d9e5ff", fontSize: 13 } },
-      grid: { left: 40, right: 10, top: 30, bottom: 20 },
+      title: { text: `生存曲线预测`, show: false },
+      grid: { left: 40, right: 10, top: 10, bottom: 30 },
       xAxis: {
         type: "category",
         data: pricing.survival_curve.map(p => p.timeline_days + "d"),
@@ -665,15 +721,16 @@ function searchSatellites(keyword) {
         type: "line",
         smooth: true,
         data: pricing.survival_curve.map(p => p.survival_prob),
-        lineStyle: { color: "#58a6ff", width: 3 },
+        lineStyle: { color: "#58a6ff", width: 2 },
         areaStyle: { 
           color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: 'rgba(88,166,255,0.6)' },
+            { offset: 0, color: 'rgba(88,166,255,0.4)' },
             { offset: 1, color: 'rgba(88,166,255,0.0)' }
           ])
         },
       }],
     });
+    window._lastChart = chart;
   };
 
   // ── Add all satellites ──
@@ -690,8 +747,7 @@ function searchSatellites(keyword) {
   }
   
   applyFilters();
-  buildCategoryFilters(); // Doesn't need catStats anymore since it computes from allOrbits
-  buildLegend(catStats);
+  buildCategoryFilters(); 
   console.timeEnd("addSatellites");
 
   // ── Render collision math high risk events ──
@@ -702,6 +758,10 @@ function searchSatellites(keyword) {
       viewer.entities.add({
         name: `${evt.asset_id} risk`,
         position: Cesium.Cartesian3.fromDegrees(lon, lat, 500000),
+        properties: new Cesium.PropertyBag({
+            asset_id: evt.asset_id,
+            is_risk_marker: true
+        }),
         ellipsoid: {
           radii: new Cesium.Cartesian3(12000, 12000, 12000),
           material: Cesium.Color.RED.withAlpha(0.6),
@@ -729,19 +789,6 @@ function searchSatellites(keyword) {
 
   // Apply initial filter (show only default categories)
   applyFilters();
-
-  // ── Click to select satellite ──
-  viewer.selectedEntityChanged.addEventListener(entity => {
-    if (!entity) {
-      hideDetailPanel();
-      return;
-    }
-    const key = (entity.id || "").toLowerCase();
-    const orbit = orbitMap[key];
-    if (orbit) {
-      showDetailPanel(orbit);
-    }
-  });
 
   // Focus satellite (exposed for API use)
   window.focusSatellite = function(keyword) {
@@ -776,3 +823,74 @@ function searchSatellites(keyword) {
   }, 120000);
 
 })();
+function initPanelToggles() {
+    const sidebar = document.getElementById("sidebar");
+    const sidebarBtn = document.getElementById("sidebarToggle");
+    const bottomBar = document.getElementById("bottomBar");
+    const container = document.getElementById("cesiumContainer");
+    
+    sidebarBtn.onclick = () => {
+        const isNowCollapsed = sidebar.classList.toggle("collapsed");
+        sidebarBtn.classList.toggle("collapsed", isNowCollapsed);
+        sidebarBtn.textContent = isNowCollapsed ? "▶" : "◀";
+        sidebarBtn.title = isNowCollapsed ? "展开侧边栏" : "收起侧边栏";
+        
+        container.classList.toggle("shift-left", !isNowCollapsed);
+        if (bottomBar) bottomBar.classList.toggle("expanded", isNowCollapsed);
+    };
+
+    document.getElementById("detailClose").onclick = hideDetailPanel;
+}
+
+function renderConjunctionList() {
+    const panel = document.getElementById("conjunctionPanel");
+    const list = document.getElementById("conjunctionList");
+    panel.classList.remove("hidden");
+    list.innerHTML = "";
+
+    const events = window.__orbitwhisperReport.high_risk_events || [];
+    if (events.length === 0) {
+        list.innerHTML = "<div style='padding:20px; text-align:center;'>当前无高危载荷交会事件</div>";
+        return;
+    }
+
+    events.forEach(evt => {
+        const item = document.createElement("div");
+        item.className = "conj-item";
+        
+        const sat1 = orbitMap[String(evt.asset_id).toLowerCase()] || { name: evt.asset_id };
+        const sat2 = orbitMap[String(evt.counterpart_id).toLowerCase()] || { name: evt.counterpart_id };
+        
+        item.innerHTML = `
+            <div class="sat-name">
+                <span class="conj-label">目标1</span>
+                <span class="conj-val">${sat1.name || evt.asset_id}</span>
+            </div>
+            <div class="sat-name">
+                <span class="conj-label">目标2</span>
+                <span class="conj-val">${sat2.name || evt.counterpart_id}</span>
+            </div>
+            <div>
+                <span class="conj-label">TCA</span>
+                <span class="conj-val">${evt.tca_utc.substring(11, 19)}</span>
+            </div>
+            <div>
+                <span class="conj-label">距离</span>
+                <span class="conj-val" style="color:#ff4466">${(evt.miss_distance_km * 1000).toFixed(0)}m</span>
+            </div>
+            <div class="conj-btn">追踪定位 ▶</div>
+        `;
+        
+        item.onclick = () => {
+            const key = String(evt.asset_id).toLowerCase();
+            const entity = entityMap[key];
+            if (entity) {
+                viewer.trackedEntity = entity;
+                viewer.flyTo(entity, { duration: 1.5 });
+                showDetailPanel(orbitMap[key]);
+            }
+            panel.classList.add("hidden");
+        };
+        list.appendChild(item);
+    });
+}
