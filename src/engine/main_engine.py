@@ -61,7 +61,26 @@ def _build_satellite_payload_real(dataset):
     prc_ids = set()
     orbit_dyn_lam = None
     epi_norm = None
-    
+    # Load real-world conjunction data if available
+    conj_path = Path(__file__).parents[2] / "data" / "detected_conjunctions.json"
+    risk_ids = set()
+    risk_map = {}
+    if conj_path.exists():
+        try:
+            with conj_path.open("r", encoding="utf-8") as f:
+                c_data = json.load(f)
+                for c in c_data:
+                    id1, id2 = int(c["id1"]), int(c["id2"])
+                    risk_ids.add(id1)
+                    risk_ids.add(id2)
+                    if id1 not in risk_map: risk_map[id1] = []
+                    if id2 not in risk_map: risk_map[id2] = []
+                    risk_map[id1].append(c)
+                    risk_map[id2].append(c)
+        except Exception as e:
+            print(f"Error loading conjunction data: {e}")
+
+    prc_ids = set()
     if INSURANCE_ENABLED:
         import requests
         from src.ext_insurance.seiard_actuarial import simulate_seiard_nsfd
@@ -114,6 +133,21 @@ def _build_satellite_payload_real(dataset):
         color = CATEGORY_COLORS.get(sat.category, "#00ffcc")
         alt_display = sat.alt  # Already in km from CelesTrak TLE data
 
+        is_high_risk = sat.norad_id in risk_ids
+        if is_high_risk:
+            high_risk_count += 1
+            # Add to high_risk_events (avoid duplicates by only adding when we are id1 or if id2 is not in dataset)
+            for c in risk_map.get(sat.norad_id, []):
+                # Using a simple heuristic to only add the event once: if we are the smaller ID
+                if sat.norad_id == min(c["id1"], c["id2"]):
+                    high_risk_events.append({
+                        "asset_id": str(c["id1"]),
+                        "counterpart_id": str(c["id2"]),
+                        "tca_utc": c["tca"],
+                        "miss_distance_km": c["dist"],
+                        "poc": 1e-4 # SOCRATES threshold usually
+                    })
+
         satellites.append({
             "id": sat_id,
             "name": sat.name,
@@ -122,9 +156,9 @@ def _build_satellite_payload_real(dataset):
             "lat": round(sat.lat, 6),
             "lng": round(sat.lng, 6),
             "alt": round(alt_display, 6),
-            "radius": 0.5,
-            "color": color,
-            "is_high_risk": False,
+            "radius": 0.8 if is_high_risk else 0.5,
+            "color": "#ff0044" if is_high_risk else color,
+            "is_high_risk": is_high_risk,
             "pof": 0.0,
             "suggested_premium": 0.0,
         })
