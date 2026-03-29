@@ -10,12 +10,20 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from src.astrometry.gauss_iod import run_gauss_pipeline
 from src.astrometry.star_tracker import SourceDetection, process_observation_frame
 
 app = FastAPI(title="OrbitWhisper Optical IOD API", version="1.0.0")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 KNOWN_SATELLITES: list[dict[str, Any]] = []
 UPLOADED_TLES: list[dict[str, Any]] = []
