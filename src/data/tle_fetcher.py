@@ -1,4 +1,4 @@
-"""Space-Track TLE data access client."""
+"""CelesTrak TLE data access client."""
 
 from __future__ import annotations
 
@@ -14,17 +14,15 @@ logger = logging.getLogger(__name__)
 
 
 class SpaceTrackClient:
-    """Client for Space-Track login/session and TLE retrieval."""
+    """Client for CelesTrak TLE retrieval.
 
-    LOGIN_URL = "https://www.space-track.org/ajaxauth/login"
-    QUERY_URL_TEMPLATE = (
-        "https://www.space-track.org/basicspacedata/query/"
-        "class/tle_latest/NORAD_CAT_ID/{norad_id}/ORDINAL/1/format/tle"
-    )
-    PUBLIC_FILES_QUERY_URL_TEMPLATE = (
-        "https://www.space-track.org/files/query/"
-        "class/tle_latest/NORAD_CAT_ID/{norad_ids}/ORDINAL/1/FORMAT/tle"
-    )
+    Data source references:
+    - https://rhodesmill.org/skyfield/earth-satellites.html#downloading-satellite-elements
+    - https://celestrak.org/NORAD/elements/
+    """
+
+    QUERY_URL_TEMPLATE = "https://celestrak.org/NORAD/elements/gp.php?CATNR={norad_id}&FORMAT=TLE"
+    PUBLIC_FILES_QUERY_URL_TEMPLATE = "https://celestrak.org/NORAD/elements/gp.php?CATNR={norad_ids}&FORMAT=TLE"
 
     def __init__(
         self,
@@ -32,31 +30,15 @@ class SpaceTrackClient:
         username: str | None = None,
         password: str | None = None,
     ) -> None:
-        load_dotenv()
-        self.username = username or os.getenv("SPACETRACK_USER") or os.getenv("SPACETRACK_IDENTITY")
-        self.password = password or os.getenv("SPACETRACK_PWD") or os.getenv("SPACETRACK_PASSWORD")
         self.timeout = timeout
         self.session = requests.Session()
-        self._is_logged_in = False
-
-        if not self.username or not self.password:
-            raise ValueError("SPACETRACK_USER and SPACETRACK_PWD must be configured")
+        # Keep backward-compatible constructor signature; credentials are unused for CelesTrak.
+        _ = (username, password, os.getenv("SPACETRACK_USER"), os.getenv("SPACETRACK_PWD"))
+        load_dotenv()
 
     def _login(self) -> None:
-        """Authenticate and persist the cookie-based session."""
-        if self._is_logged_in:
-            return
-
-        payload = {"identity": self.username, "password": self.password}
-        logger.info("Logging into Space-Track")
-        response = self.session.post(self.LOGIN_URL, data=payload, timeout=self.timeout)
-        response.raise_for_status()
-
-        if "failed" in response.text.lower():
-            raise RuntimeError("Space-Track authentication failed")
-
-        self._is_logged_in = True
-        logger.info("Space-Track login successful")
+        """Retained for backward compatibility; no login needed for CelesTrak."""
+        return
 
     @staticmethod
     def _parse_tle_text(raw_text: str) -> dict[str, str]:
@@ -78,14 +60,14 @@ class SpaceTrackClient:
         """Fetch latest TLE by NORAD catalog ID."""
         self._login()
         url = self.QUERY_URL_TEMPLATE.format(norad_id=norad_id)
-        logger.info("Fetching latest TLE for NORAD ID %s", norad_id)
+        logger.info("Fetching latest TLE for NORAD ID %s from CelesTrak", norad_id)
 
         try:
             response = self.session.get(url, timeout=self.timeout)
             response.raise_for_status()
         except requests.RequestException as exc:
             logger.exception("Failed retrieving TLE for NORAD ID %s", norad_id)
-            raise RuntimeError(f"Space-Track query failed for NORAD ID {norad_id}") from exc
+            raise RuntimeError(f"CelesTrak query failed for NORAD ID {norad_id}") from exc
 
         parsed = self._parse_tle_text(response.text)
         parsed["norad_id"] = norad_id
@@ -98,36 +80,15 @@ class SpaceTrackClient:
             return []
 
         id_str = ",".join(str(int(norad_id)) for norad_id in norad_ids)
-        query_url = (
-            "https://www.space-track.org/basicspacedata/query/"
-            f"class/tle_latest/NORAD_CAT_ID/{id_str}/ORDINAL/1/FORMAT/json"
-        )
-        logger.info("Fetching latest TLEs for %d NORAD IDs", len(norad_ids))
+        query_url = self.PUBLIC_FILES_QUERY_URL_TEMPLATE.format(norad_ids=id_str)
+        logger.info("Fetching latest TLEs for %d NORAD IDs from CelesTrak", len(norad_ids))
         try:
             response = self.session.get(query_url, timeout=self.timeout)
             response.raise_for_status()
-            payload = response.json()
-        except (requests.RequestException, ValueError) as exc:
+        except requests.RequestException as exc:
             logger.exception("Failed retrieving batched TLEs")
-            raise RuntimeError("Space-Track batch query failed") from exc
-
-        if not isinstance(payload, list):
-            return []
-
-        rows: list[dict[str, Any]] = []
-        for item in payload:
-            if not isinstance(item, dict):
-                continue
-            line1 = str(item.get("TLE_LINE1", "")).strip()
-            line2 = str(item.get("TLE_LINE2", "")).strip()
-            if not (line1.startswith("1 ") and line2.startswith("2 ")):
-                continue
-            try:
-                norad_id = int(item.get("NORAD_CAT_ID"))
-            except (TypeError, ValueError):
-                continue
-            rows.append({"norad_id": norad_id, "line1": line1, "line2": line2})
-        return rows
+            raise RuntimeError("CelesTrak batch query failed") from exc
+        return self._parse_tle_blocks(response.text)
 
     @staticmethod
     def _parse_tle_blocks(raw_text: str) -> list[dict[str, Any]]:
@@ -165,19 +126,19 @@ class SpaceTrackClient:
         return rows
 
     def get_public_file_tles_by_ids(self, norad_ids: list[int]) -> list[dict[str, Any]]:
-        """Fetch latest TLEs from Space-Track public files endpoint."""
+        """Fetch latest TLEs from CelesTrak by NORAD IDs."""
         self._login()
         if not norad_ids:
             return []
 
         id_str = ",".join(str(int(norad_id)) for norad_id in norad_ids)
         query_url = self.PUBLIC_FILES_QUERY_URL_TEMPLATE.format(norad_ids=id_str)
-        logger.info("Fetching public-file TLEs for %d NORAD IDs", len(norad_ids))
+        logger.info("Fetching public-file TLEs for %d NORAD IDs from CelesTrak", len(norad_ids))
         try:
             response = self.session.get(query_url, timeout=self.timeout)
             response.raise_for_status()
         except requests.RequestException as exc:
             logger.exception("Failed retrieving public-file TLEs")
-            raise RuntimeError("Space-Track public-files query failed") from exc
+            raise RuntimeError("CelesTrak public-files query failed") from exc
 
         return self._parse_tle_blocks(response.text)

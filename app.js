@@ -200,6 +200,11 @@ async function fetchExternalOrbitFeed(url) {
       }
     };
     report.orbits.forEach((orbit) => upsertSatelliteEntity(orbit));
+    window.__orbitwhisperAddUploadedOrbit = function addUploadedOrbit(orbit) {
+      if (!orbit || !orbit.asset_id) return false;
+      upsertSatelliteEntity(orbit);
+      return true;
+    };
     window.focusSatellite = function focusSatellite(keyword) {
       const key = String(keyword || "").trim().toLowerCase();
       if (!key) return false;

@@ -32,13 +32,10 @@ class TestSpaceTrackClientParser(unittest.TestCase):
         client._login = Mock()
         client.session = Mock()
         response = Mock()
-        response.json.return_value = [
-            {
-                "NORAD_CAT_ID": "25544",
-                "TLE_LINE1": "1 25544U 98067A   24068.52754500  .00020000  00000-0  29677-4 0  9994",
-                "TLE_LINE2": "2 25544  51.6418  72.8432 0004908  56.6248  85.7564 15.50000000444823",
-            }
-        ]
+        response.text = (
+            "1 25544U 98067A   24068.52754500  .00020000  00000-0  29677-4 0  9994\n"
+            "2 25544  51.6418  72.8432 0004908  56.6248  85.7564 15.50000000444823\n"
+        )
         response.raise_for_status.return_value = None
         client.session.get.return_value = response
 
@@ -109,7 +106,7 @@ class TestSpaceTrackClientParser(unittest.TestCase):
         response.raise_for_status.side_effect = requests.RequestException("boom")
         client.session.get.return_value = response
 
-        with self.assertRaisesRegex(RuntimeError, "public-files query failed"):
+        with self.assertRaisesRegex(RuntimeError, "query failed"):
             client.get_public_file_tles_by_ids([25544])
 
     def test_parse_tle_blocks_skips_mismatched_catalog_numbers(self):

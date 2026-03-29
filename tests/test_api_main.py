@@ -42,6 +42,37 @@ class TestOpticalApi(unittest.TestCase):
         self.assertEqual(search.status_code, 200)
         self.assertGreaterEqual(len(search.json()["results"]), 1)
 
+    def test_upload_tle_rejects_duplicate_by_catalog_id_and_returns_orbit_preview(self):
+        tle_text = (
+            "ISS\n"
+            "1 25544U 98067A   24068.52754500  .00020000  00000-0  29677-4 0  9994\n"
+            "2 25544  51.6418  72.8432 0004908  56.6248  85.7564 15.50000000444823"
+        )
+        first = self.client.post("/api/upload_tle", json={"tle_text": tle_text, "name": "ISS-A"})
+        self.assertEqual(first.status_code, 200)
+        first_payload = first.json()
+        self.assertFalse(first_payload["duplicate"])
+        self.assertIn("orbit", first_payload)
+
+        dup = self.client.post("/api/upload_tle", json={"tle_text": tle_text, "name": "ISS-B"})
+        self.assertEqual(dup.status_code, 200)
+        dup_payload = dup.json()
+        self.assertTrue(dup_payload["duplicate"])
+        self.assertEqual(dup_payload["satellite"]["name"], "ISS-A")
+        self.assertIn("orbit", dup_payload)
+
+    def test_upload_tle_accepts_extra_header_lines(self):
+        tle_text = (
+            "Downloaded from CelesTrak\n"
+            "ISS (ZARYA)\n"
+            "1 25544U 98067A   24068.52754500  .00020000  00000-0  29677-4 0  9994\n"
+            "2 25544  51.6418  72.8432 0004908  56.6248  85.7564 15.50000000444823\n"
+        )
+        resp = self.client.post("/api/upload_tle", json={"tle_text": tle_text})
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.json()
+        self.assertEqual(payload["satellite"]["name"], "ISS (ZARYA)")
+
     def test_name_binding_roundtrip(self):
         bind = self.client.post("/api/satellites/name", json={"temp_id": "UNKN-2026-A", "custom_name": "Astro-X1"})
         self.assertEqual(bind.status_code, 200)
