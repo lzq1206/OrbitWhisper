@@ -1,6 +1,6 @@
 # AstroQuant 3D Daily Compute Report
 
-- Generated at: `2026-04-09T07:18:24+00:00`
+- Generated at: `2026-04-09T13:20:07+00:00`
 - Total satellites: **12932**
 - Collision events: **0**
 - High risk events (<5km): **11**
@@ -8,10 +8,10 @@
 
 ## Satellite Categories
 
-- 空间站与特殊兴趣: **248**
+- 空间站与特殊兴趣: **493**
 - 其他: **120**
 - 导航卫星: **201**
 - 气象与地球资源: **478**
 - 通信卫星: **873**
 - 科学卫星: **91**
-- 大型星座: **10921**
+- 大型星座: **10676**
