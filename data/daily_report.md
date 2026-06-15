@@ -1,14 +1,14 @@
 # AstroQuant 3D Daily Compute Report
 
-- Generated at: `2026-06-15T17:13:20+00:00`
-- Total satellites: **13862**
+- Generated at: `2026-06-15T20:53:02+00:00`
+- Total satellites: **13870**
 - Collision events: **0**
 - High risk events (<5km): **11**
-- Priced assets: **13862**
+- Priced assets: **13870**
 
 ## Satellite Categories
 
-- 空间站与特殊兴趣: **593**
+- 空间站与特殊兴趣: **601**
 - 其他: **121**
 - 导航卫星: **201**
 - 气象与地球资源: **488**
