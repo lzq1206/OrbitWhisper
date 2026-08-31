@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-31T05:54:33+00:00",
+  "generated_at": "2026-08-31T12:32:30+00:00",
   "source": "celestrak",
   "total_satellites": 14436,
   "category_counts": {
@@ -49,7 +49,10 @@
     "military": 0,
     "radar": 0,
     "cubesat": 0,
-    "other": 0
+    "other": 0,
+    "starlink": 0,
+    "oneweb": 0,
+    "qianfan": 0
   },
   "satellites": [
     {
