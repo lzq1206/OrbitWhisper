@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="OrbitWhisper - 实时 3D 在轨卫星可视化与碰撞风险监控终端" />
+  <title>OrbitWhisper | 3D 在轨资产可视化终端</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.0/echarts.min.js" integrity="sha384-o5uz97et3bErHvpKfD4Jz4n0JfhJDWABFuF4NP+iEEDxE1VwMWJ19QGR0lqFZnr6" crossorigin="anonymous"></script>
+  <script src="https://cesium.com/downloads/cesiumjs/releases/1.120/Build/Cesium/Cesium.js" integrity="sha384-u6lI9nKeZ0sgcSQty6qC4XQHU/ZG7JJ8PfRvtUQTH83OstsiEivIu3F9k012EB3W" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/satellite.js/5.0.0/satellite.min.js"></script>
+  <link href="https://cesium.com/downloads/cesiumjs/releases/1.120/Build/Cesium/Widgets/widgets.css" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="cesiumContainer"></div>
+
+  <!-- ── Left Sidebar ── -->
+  <button id="sidebarToggle" class="panel-toggle side-toggle" title="展开/收起侧边栏">◀</button>
+  <div id="sidebar">
+    <div class="sidebar-header">
+      <h1>OrbitWhisper</h1>
+      <span class="sidebar-subtitle">实时在轨卫星可视化</span>
+    </div>
+
+    <!-- Search -->
+    <div class="sidebar-section">
+      <input id="searchInput" type="text" placeholder="搜索卫星名称或 NORAD ID..." />
+      <ul id="searchResults"></ul>
+    </div>
+
+    <!-- Category Filters -->
+    <div class="sidebar-section">
+      <div class="section-title">卫星分类筛选</div>
+      <div id="categoryFilters"></div>
+      <div class="filter-actions" style="margin-top: 8px;">
+        <label style="display: flex; align-items: center; cursor: pointer; color: #ff4757; font-size: 13px; font-weight: normal;">
+          <input type="checkbox" id="prcOnlyToggle" style="margin-right: 6px;">
+          🇨🇳 仅显示中国在轨资产 (PRC)
+        </label>
+      </div>
+      <div class="filter-actions" style="margin-top: 8px;">
+        <label style="display: flex; align-items: center; cursor: pointer; color: #ffab00; font-size: 13px; font-weight: normal;">
+          <input type="checkbox" id="highRiskOnlyToggle" style="margin-right: 6px;">
+          🚨 仅显示高危交会风险目标
+        </label>
+      </div>
+      <div class="filter-actions" style="margin-top: 8px;">
+        <button id="selectAllBtn" class="action-btn">全选</button>
+        <button id="deselectAllBtn" class="action-btn">全不选</button>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="sidebar-section">
+      <div class="section-title">数据统计</div>
+      <div id="statsPanel">
+        <div class="stat-row"><span>数据库总量</span><span id="totalCount">-</span></div>
+        <div class="stat-row"><span>当前显示</span><span id="visibleCount">-</span></div>
+        <div class="stat-row clickable" id="highRiskStats"><span>高危交会预警</span><span id="highRiskCount" class="warn-text" style="text-decoration: underline; cursor: pointer;">0 起</span></div>
+        <div class="stat-row"><span>更新时间</span><span id="updateTime">-</span></div>
+      </div>
+    </div>
+
+    <!-- Upload -->
+    <div class="sidebar-section collapsible">
+      <div class="section-title clickable" data-toggle="uploadBody">
+        高级功能 <span class="toggle-icon">▶</span>
+      </div>
+      <div id="uploadBody" class="collapsed">
+        <button id="tleUploadBtn" class="upload-btn">上传 TLE 文件</button>
+        <input id="tleFileInput" type="file" accept=".tle,.txt,text/plain" style="display:none;" />
+        <button id="imageUploadBtn" class="upload-btn">上传观测图片</button>
+        <input id="imageFileInput" type="file" accept="image/*" multiple style="display:none;" />
+        <div id="statusText" class="status-text"></div>
+      </div>
+    </div>
+
+    <div class="sidebar-footer">
+      <a href="https://celestrak.org/NORAD/elements/" target="_blank" rel="noopener">数据来源: CelesTrak</a>
+    </div>
+  </div>
+
+  <!-- ── Bottom Status Bar ── -->
+  <div id="bottomBar">
+    <span id="clockDisplay" style="margin-right: 15px; font-family: monospace; color: #00ffcc;"></span>
+    <span id="bottomStatus">正在加载卫星数据...</span>
+    <span id="bottomCount"></span>
+  </div>
+
+  <!-- ── Right Sidebar (Detail & Analytics) ── -->
+  <div id="detailPanel" class="hidden">
+    <div class="detail-header">
+      <span id="detailTitle">卫星详情与精算分析</span>
+      <button id="detailClose" class="close-btn">✕</button>
+    </div>
+    <div id="detailScroll" class="scroll-list">
+      <div id="detailBody"></div>
+      
+      <div id="pricingModelSection" class="hidden">
+        <div class="separator"></div>
+        <div class="sidebar-section-title">动态定价精算模型</div>
+        <div id="actuarialBody"></div>
+      </div>
+
+      <div id="chartSection" class="hidden">
+        <div class="separator"></div>
+        <div class="sidebar-section-title">资产降落/衰减曲线</div>
+        <div id="survivalChart"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Conjunction Events Panel ── -->
+  <div id="conjunctionPanel" class="hidden">
+    <div class="panel-header">
+      <span>🚨 SOCRATES 实时高危交会清单</span>
+      <button id="conjunctionClose" class="close-btn">✕</button>
+    </div>
+    <div id="conjunctionList" class="scroll-list"></div>
+  </div>
+
+  <!-- ── Naming Modal ── -->
+  <div id="namingModal">
+    <div class="modal-content">
+      <div id="modalMessage">发现未知目标，系统建议命名为 Astro-X1</div>
+      <input id="namingInput" type="text" placeholder="输入自定义名称..." />
+      <div class="modal-actions">
+        <button id="saveNameBtn" class="action-btn">保存命名</button>
+        <button id="cancelNameBtn" class="action-btn">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>
