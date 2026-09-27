@@ -1,0 +1,12 @@
+services:
+  orbitwhisper:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: orbitwhisper
+    env_file:
+      - .env
+    volumes:
+      - ./:/app
+    working_dir: /app
+    command: ["python", "-m", "src.main"]
